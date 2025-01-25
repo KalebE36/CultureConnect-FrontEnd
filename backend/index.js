@@ -14,6 +14,8 @@ const io = new Server(server, {
 // In a real app, you might use a database or more sophisticated tracking
 const calls = {}; // { callId: true }
 
+
+// test
 app.get("/", (req, res) => {
   res.send("Hello from the Socket.IO server!");
 });
