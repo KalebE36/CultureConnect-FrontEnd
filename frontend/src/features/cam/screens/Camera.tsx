@@ -15,6 +15,7 @@ export default function CallsList() {
       transports: ["websocket"], // Ensure it uses WebSocket transport
       path: "/socket.io", // Path used by the WebSocket server (default for Socket.IO)
     });
+    
     setSocket(s);
 
     // Listen for updates to active calls
