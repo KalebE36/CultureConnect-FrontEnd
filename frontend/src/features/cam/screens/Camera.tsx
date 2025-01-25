@@ -50,6 +50,7 @@ export default function CallsList() {
   const handleStartCall = () => {
     if (socket) {
       socket.emit("start-call");
+      console.log("socket emitted");
     }
   };
 
@@ -76,7 +77,12 @@ export default function CallsList() {
         </div>
       ) : (
         <div>
-          <button onClick={handleStartCall}>Start a New Call</button>
+          <button onClick={()=> 
+            {handleStartCall();
+
+            }}>
+              Start a New Call
+              </button>
           <h2>Or join an existing call:</h2>
           <ul>
             {activeCalls.map((callId) => (
