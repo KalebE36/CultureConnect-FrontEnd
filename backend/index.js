@@ -14,13 +14,15 @@ const io = new Server(server, {
 // In a real app, you might use a database or more sophisticated tracking
 const calls = {}; // { callId: true }
 
+app.get("/", (req, res) => {
+  res.send("Hello from the Socket.IO server!");
+});
+
 io.on("connection", (socket) => {
   console.log("New client connected:", socket.id);
 
   // Just a test route so we know server is up
-  app.get("/", (req, res) => {
-    res.send("Hello from the Socket.IO server!");
-  });
+  
 
   // 1. Start a new call
   socket.on("start-call", () => {
