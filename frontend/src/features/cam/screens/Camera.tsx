@@ -8,7 +8,13 @@ export default function CallsList() {
   const [joinedCall, setJoinedCall] = useState<string | null>(null);
 
   useEffect(() => {
-    const s = io("http://localhost:3000");
+    const WEBSOCKET_URL = "wss://cultureconnect-frontend-production.up.railway.app";
+
+    // Initialize the WebSocket connection
+    const s = io(WEBSOCKET_URL, {
+      transports: ["websocket"], // Ensure it uses WebSocket transport
+      path: "/socket.io", // Path used by the WebSocket server (default for Socket.IO)
+    });
     setSocket(s);
 
     // Listen for updates to active calls
