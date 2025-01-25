@@ -2,7 +2,7 @@
 
 export default function LoginScreen() {
     return (
-        <main>
+        <main className="bg-purple-700">
             <h3>
                 Hello
             </h3>
