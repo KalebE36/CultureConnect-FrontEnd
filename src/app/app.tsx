@@ -1,11 +1,15 @@
+import { Routes, Route } from 'react-router-dom';
+import LoginScreen from '../features/login/screens/Login';
+import HomeScreen from '../features/home/screens/Home';
 
 function App() {
   return (
-    <main className="bg-blue-500">
-      <h3>
-        test
-      </h3>
-    </main>
+    <>
+      <Routes>
+            <Route path="/" element={<HomeScreen />} />
+            <Route path="/login" element={<LoginScreen/>} />
+      </Routes>
+    </>
   );
 }
 
