@@ -4,6 +4,7 @@ import HomeScreen from '../features/home/screens/Home';
 import Camera from '../features/cam/screens/Camera';
 import ProtectedRoute from '../features/auth/components/ProtectedRoute';
 import Profile from '../features/profile/screens/Profile';
+import Translate from '../features/translation/screens/Translate';
 
 function App() {
   return (
@@ -13,6 +14,7 @@ function App() {
             <Route path="/login" element={<LoginScreen/>} />
             <Route path="/camera" element={<ProtectedRoute><Camera/></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><Profile/></ProtectedRoute>} />
+            <Route path="/translate" element={<ProtectedRoute><Translate/></ProtectedRoute>} />
       </Routes>
     </BrowserRouter>
   );
