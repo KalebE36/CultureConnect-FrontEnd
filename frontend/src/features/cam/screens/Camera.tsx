@@ -80,7 +80,7 @@ export default function CallsList() {
         // new call
         setActiveCalls((prev) => [
           ...prev,
-          { callId, ownerName: "??", ownerLang: "??" },
+          { callId, ownerName: userName, ownerLang: userLang },
         ]);
       });
       s.on("call-id", (callId: string) => {
