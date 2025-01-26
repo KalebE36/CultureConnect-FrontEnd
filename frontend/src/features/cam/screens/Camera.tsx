@@ -47,8 +47,10 @@ export default function CallsList() {
         nativeLang = data.native_language || nativeLang;
       }
 
-      setUserName(displayName);
-      setUserLang(nativeLang);
+      setTimeout(() =>{
+        setUserName(displayName);
+        setUserLang(nativeLang);
+      }, 2000);
 
       // Connect to Socket.IO
       const s = io("wss://cultureconnect-frontend-production.up.railway.app", {
