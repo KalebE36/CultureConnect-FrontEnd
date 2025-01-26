@@ -1,4 +1,5 @@
 import React from "react";
+import globly2 from "../img/globely2.png";
 import {
   getAuth,
   signInWithPopup,
@@ -51,7 +52,7 @@ export default function LoginScreen() {
   };
 
   return (
-    <main className="relative w-screen h-screen bg-[#4f70e2] overflow-hidden">
+    <main className="relative w-screen h-screen bg-[#4f70e2] overflow-hidden flex flex-col items-center justify-center">
       {/* Top-left wave */}
       <div
         style={{
@@ -62,7 +63,6 @@ export default function LoginScreen() {
           height: "20vw",
           backgroundColor: "#FFFFFF",
           borderBottomRightRadius: "80%", // Increased curve intensity
-
           transform: "rotate(-10deg)", // Adds more dynamic rotation
         }}
       />
@@ -77,25 +77,32 @@ export default function LoginScreen() {
           backgroundColor: "#FFFFFF",
           borderTopLeftRadius: "90%", // Increased curve intensity
           borderBottomLeftRadius: "-30%", // Increased curve intensity
-
           transform: "rotate(20deg)", // Adds a more dynamic flow
         }}
       />
+
       {/* Centered login card */}
-      <div className="relative flex items-center justify-center w-full h-full">
-        <div className="bg-white p-8 rounded shadow-md w-full max-w-sm">
-          <h1 className="text-center text-2xl font-bold mb-6">
-            Login
-          </h1>
-          <button
-            type="button"
-            className="w-full flex items-center justify-center gap-2 py-2 px-4 bg-blue-500 hover:bg-blue-600 
-                       text-white rounded-md focus:outline-none focus:ring-2 focus:ring-blue-400"
-            onClick={handleGoogleLogin}
-          >
-            Sign in with Google
-          </button>
-        </div>
+      <div className="bg-white p-8  rounded shadow-md w-full max-w-sm z-10 mt-20">
+        <h1 className="text-center text-2xl font-bold mb-6">
+          Login
+        </h1>
+        <button
+          type="button"
+          className="w-full flex items-center justify-center gap-2 py-2 px-4 bg-blue-500 hover:bg-blue-600 
+                     text-white rounded-md focus:outline-none focus:ring-2 focus:ring-blue-400"
+          onClick={handleGoogleLogin}
+        >
+          Sign in with Google
+        </button>
+      </div>
+
+      {/* Globe Graphic, placed below the login card */}
+      <div className="mt-8 flex">
+        <img
+          src={globly2}
+          alt="Earth with a light bulb"
+          className="w-25 sm:w-25 md:w-50 lg:w-60 h-auto mt-8"
+        />
       </div>
     </main>
   );
