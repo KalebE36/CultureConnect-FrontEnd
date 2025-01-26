@@ -37,7 +37,7 @@ export default function LoginScreen() {
             console.log("User already exists in Firestore");
           }
   
-          navigate("/"); // Redirect to home or dashboard
+          navigate("/profile"); // Redirect to home or dashboard
         }
       } catch (error) {
         console.error("Error signing in with Google:", error);
