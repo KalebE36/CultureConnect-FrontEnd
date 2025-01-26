@@ -182,9 +182,6 @@ export default function VideoChat({
                   muted
                   playsInline
                 />
-                <p className="text-lg font-semibold z-10 pointer-events-none">
-                  Local Video
-                </p>
               </div>
             </div>
 
@@ -197,9 +194,6 @@ export default function VideoChat({
                   autoPlay
                   playsInline
                 />
-                <p className="text-lg font-semibold z-10 pointer-events-none">
-                  Remote Video
-                </p>
               </div>
             </div>
           </div>
