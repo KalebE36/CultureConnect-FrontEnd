@@ -2,10 +2,12 @@ import React, { useEffect, useState } from "react"
 import { getFirestore, doc, getDoc, updateDoc } from "firebase/firestore"
 import { firebaseApp } from "../../../config/firebaseConfig"
 import { useAuth } from "../../auth/hooks/useAuth"
+import { useNavigate } from "react-router-dom"
 
 export default function ProfileEditor() {
   const { user, loading } = useAuth()
   const db = getFirestore(firebaseApp)
+  const navigate = useNavigate();
 
   // Local state for profile fields
   const [name, setName] = useState("")
@@ -54,6 +56,11 @@ export default function ProfileEditor() {
       })
 
       setMessage("Profile updated successfully!")
+
+      setTimeout(() => {
+        navigate("/camera");
+      }, 2000);
+      
     } catch (error) {
       console.error("Error updating profile:", error)
       setMessage("Error updating profile. Please try again.")

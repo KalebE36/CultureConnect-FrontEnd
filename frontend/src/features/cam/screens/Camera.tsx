@@ -4,29 +4,18 @@ import { getFirestore, doc, getDoc } from "firebase/firestore";
 import { firebaseApp } from "../../../config/firebaseConfig";
 import { useAuth } from "../../auth/hooks/useAuth";
 
-// We'll define a shape for the calls we receive from "active-calls"
 interface ActiveCall {
   callId: string;
   ownerName: string;
   ownerLang: string;
 }
 
-/**
- * The main CallsList component:
- *  - Connects to the Socket.IO server
- *  - Fetches the user's name & language from Firestore
- *  - Lets user start/join calls
- *  - Displays transcripts & translations
- *  - Renders <VideoChat> once in a call
- */
 export default function CallsList() {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [activeCalls, setActiveCalls] = useState<ActiveCall[]>([]);
   const [joinedCall, setJoinedCall] = useState<string | null>(null);
 
-  // Store the user's own recognized speech
   const [latestTranscript, setLatestTranscript] = useState("");
-  // Store translated messages from others
   const [translatedMessages, setTranslatedMessages] = useState<
     { original: string; translated: string; from: string; to: string }[]
   >([]);
@@ -34,7 +23,7 @@ export default function CallsList() {
   const [userName, setUserName] = useState("Unknown");
   const [userLang, setUserLang] = useState("en-US");
 
-  const { user, loading } = useAuth(); // your custom auth hook
+  const { user, loading } = useAuth();
   const db = getFirestore(firebaseApp);
 
   // 1. On mount (once auth is ready), fetch user info, connect Socket
@@ -68,7 +57,7 @@ export default function CallsList() {
       });
       setSocket(s);
 
-      // 2. Once connected, set language
+      // After connecting, set language
       s.emit("set-language", nativeLang);
 
       // Listen for calls, transcripts, etc.
@@ -77,7 +66,6 @@ export default function CallsList() {
         setActiveCalls(calls);
       });
       s.on("call-started", (callId: string) => {
-        // new call
         setActiveCalls((prev) => [
           ...prev,
           { callId, ownerName: userName, ownerLang: userLang },
@@ -130,7 +118,7 @@ export default function CallsList() {
     socket?.emit("join-call", callId);
   }
 
-  // Leave call (simple approach: reload)
+  // Leave call
   function handleLeave() {
     console.log("Leaving the video chat...");
     setJoinedCall(null);
@@ -139,8 +127,8 @@ export default function CallsList() {
     window.location.reload();
   }
 
+  // If we've joined a call, show the video/translation interface
   if (joinedCall && socket) {
-    // If we've joined a call, show video chat
     return (
       <div className="min-h-screen flex flex-col bg-gray-100 p-4">
         <header className="mb-4">
@@ -201,58 +189,88 @@ export default function CallsList() {
     );
   }
 
-  // Not in a call => show list
+  // Otherwise, show the lobby list (grid style)
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-400 to-blue-600 p-4">
-      <div className="max-w-2xl mx-auto bg-white p-6 rounded-md shadow space-y-4">
-        <h1 className="text-center text-2xl font-bold text-gray-800 mb-2">
+    <div className="min-h-screen bg-gradient-to-br from-blue-400 to-blue-600 p-4 sm:p-6 lg:p-8">
+      <header className="mb-8 text-center">
+        <h1 className="text-3xl sm:text-4xl font-bold text-white mb-4">
           CultureConnect Video Calls
         </h1>
-        <p className="text-center text-sm text-gray-600">
+        <p className="text-white text-sm mb-4">
           Welcome <span className="font-semibold">{userName}</span> (
           <em>{userLang}</em>)
         </p>
+        <button
+          onClick={handleStartCall}
+          className="bg-green-500 text-white py-2 px-6 rounded-full hover:bg-green-600 transition-colors duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 shadow-md"
+        >
+          Create Call
+        </button>
+      </header>
 
-        <div className="mt-4 space-y-3">
-          <button
-            onClick={handleStartCall}
-            className="w-full px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition"
-          >
-            Start a New Call
-          </button>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+        {activeCalls.length === 0 && (
+          <p className="text-center text-white text-sm col-span-full italic">
+            No active calls at the moment.
+          </p>
+        )}
+        {activeCalls.map(({ callId, ownerName, ownerLang }) => {
+          // Example: turn "en-US" -> "EN"
+          const countryCode = ownerLang
+            ? ownerLang.split("-")[0].toUpperCase()
+            : "??";
 
-          <h2 className="text-lg font-semibold text-gray-700">Or join an existing call:</h2>
-          {activeCalls.length === 0 && (
-            <p className="text-gray-500 text-sm italic">No active calls right now.</p>
-          )}
-          <ul className="space-y-2">
-            {activeCalls.map(({ callId, ownerName, ownerLang }) => (
-              <li key={callId} className="flex flex-col sm:flex-row items-start sm:items-center sm:justify-between border border-gray-200 rounded p-3">
-                <div className="text-gray-700">
-                  <span className="font-semibold text-blue-700">{ownerName}</span>{" "}
-                  (<em>{ownerLang}</em>) -{" "}
-                  <span className="text-sm text-gray-500">ID: {callId}</span>
+          return (
+            <div
+              key={callId}
+              className="bg-white rounded-lg shadow-md overflow-hidden transition-transform duration-300 ease-in-out transform hover:scale-105"
+            >
+              <div className="p-4 sm:p-6">
+                <div className="flex items-center mb-4">
+                  <div className="mr-3 w-8 h-8 flex items-center justify-center bg-gray-200 rounded-full text-sm font-semibold">
+                    {countryCode}
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-semibold text-gray-800">
+                      {ownerLang}
+                    </h2>
+                    <p className="text-sm text-gray-600 flex items-center">
+                      <svg
+                        className="w-4 h-4 mr-1"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                        />
+                      </svg>
+                      {ownerName}
+                    </p>
+                  </div>
                 </div>
+                {/* ID: {callId} if you want to display callId somewhere */}
                 <button
                   onClick={() => handleJoinCall(callId)}
-                  className="mt-2 sm:mt-0 sm:ml-3 px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 transition text-sm"
+                  className="w-full bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-600 transition-colors duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
                 >
-                  Join
+                  Join Lobby
                 </button>
-              </li>
-            ))}
-          </ul>
-        </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
 }
 
 /**
- * VideoChat component (UI improved with Tailwind):
- * - Acquire local video+audio
- * - Setup WebRTC
- * - Also record audio chunks => "audio-data"
+ * VideoChat component
  */
 function VideoChat({
   callId,
@@ -318,6 +336,7 @@ function VideoChat({
       }
     };
 
+    // Send a chunk every 250ms
     recorder.start(250);
     console.log("Audio recorder started.");
 
@@ -358,7 +377,7 @@ function VideoChat({
       try {
         await peerConnection.addIceCandidate(candidate);
       } catch (err) {
-        console.error("Error adding ICE:", err);
+        console.error("Error adding ICE candidate:", err);
       }
     };
 
@@ -371,9 +390,8 @@ function VideoChat({
       socket.off("answer", handleAnswer);
       socket.off("ice-candidate", handleICE);
     };
-  }, [socket, peerConnection]);
+  }, [socket, peerConnection, callId]);
 
-  // createPeerConnection
   function createPeerConnection() {
     const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
     if (localStream) {
