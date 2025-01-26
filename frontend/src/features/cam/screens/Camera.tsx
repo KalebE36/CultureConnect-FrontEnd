@@ -61,7 +61,6 @@ export default function CallsList() {
       // 4. Listen for server events
       s.on("active-calls", (calls: ActiveCall[]) => {
         // e.g. [{ callId: "abcd1234" }]
-        // We'll store them, but they won't have ownerName/Lang by default
         console.log("Got active calls:", calls);
         setActiveCalls(calls);
       });
@@ -69,7 +68,6 @@ export default function CallsList() {
       s.on("call-started", ({ callId }) => {
         console.log("New call started:", callId);
         // The server only gives { callId }
-        // We'll add a placeholder; we expect "client-call-info" soon from the starter
         setActiveCalls((prev) => [...prev, { callId }]);
       });
 
@@ -78,7 +76,7 @@ export default function CallsList() {
         console.log("We are the caller; got call-id:", callId);
         setJoinedCall(callId);
 
-        // 5. Immediately emit "client-call-info" so everyone can see real name/lang
+        // Immediately emit "client-call-info" so everyone sees real name/lang
         s.emit("client-call-info", {
           callId,
           ownerName: displayName,
@@ -91,27 +89,29 @@ export default function CallsList() {
         setJoinedCall(callId);
       });
 
-      // 6. A client just told us real call info
-      s.on("client-call-info", (payload: { callId: string; ownerName: string; ownerLang: string }) => {
-        // e.g. { callId: 'abcd1234', ownerName: 'Alice', ownerLang: 'en-US' }
-        console.log("Received client-call-info:", payload);
-        setActiveCalls((prev) => {
-          // If we already have that call in the list, update it
-          const found = prev.find((c) => c.callId === payload.callId);
-          if (!found) {
-            // Not in list => add new
-            return [...prev, payload];
-          }
-          // Otherwise, update its name/lang
-          return prev.map((c) =>
-            c.callId === payload.callId
-              ? { ...c, ownerName: payload.ownerName, ownerLang: payload.ownerLang }
-              : c
-          );
-        });
-      });
+      // A client told us real call info
+      s.on(
+        "client-call-info",
+        (payload: { callId: string; ownerName: string; ownerLang: string }) => {
+          console.log("Received client-call-info:", payload);
+          setActiveCalls((prev) => {
+            // If we already have that call in the list, update it
+            const found = prev.find((c) => c.callId === payload.callId);
+            if (!found) {
+              // Not in list => add new
+              return [...prev, payload];
+            }
+            // Otherwise, update its name/lang
+            return prev.map((c) =>
+              c.callId === payload.callId
+                ? { ...c, ownerName: payload.ownerName, ownerLang: payload.ownerLang }
+                : c
+            );
+          });
+        }
+      );
 
-      // 7. STT / Transcripts
+      // STT / Transcripts
       s.on("transcript", (text: string) => {
         console.log("Transcript (my speech):", text);
         setLatestTranscript(text);
@@ -139,7 +139,6 @@ export default function CallsList() {
   // Start a new call
   function handleStartCall() {
     if (!socket) return;
-    // We only send "start-call" -> server returns callId + "call-started"
     socket.emit("start-call");
   }
 
@@ -157,113 +156,152 @@ export default function CallsList() {
     window.location.reload();
   }
 
-  // If joined
+  // =============== If In-Call ===============
   if (joinedCall && socket) {
     return (
-      <div className="min-h-screen p-6 bg-gray-200">
-        <h1 className="text-xl font-bold mb-2">In Call: {joinedCall}</h1>
-        <p>
-          Hello {userName} <em>({userLang})</em>
-        </p>
+      // Gradient background, center content
+      <div className="min-h-screen p-4 sm:p-6 lg:p-8 bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center">
+        {/* Semi-transparent card */}
+        <div className="w-full max-w-7xl bg-white/90 backdrop-blur-sm shadow-xl rounded-md p-6 space-y-6">
+          {/* Header */}
+          <header>
+            <h1 className="text-2xl font-semibold text-gray-700 mb-1">
+              In Call: {joinedCall}
+            </h1>
+            <p className="text-gray-600">
+              Hello <span className="font-medium">{userName}</span> (
+              <em>{userLang}</em>)
+            </p>
+          </header>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
-          {/* left col: transcripts */}
-          <div className="bg-white p-4 rounded shadow">
-            <h2 className="text-lg font-semibold">My Transcript</h2>
-            <div className="border p-2 my-2 min-h-[60px]">
-              {latestTranscript || (
-                <span className="text-gray-400 italic">No speech yet</span>
-              )}
-            </div>
+          {/* Two-column layout for transcripts and video */}
+          <div className="flex flex-col lg:flex-row gap-6">
+            {/* Left column: transcripts & translations */}
+            <div className="flex-1 bg-white p-4 rounded-md shadow space-y-4">
+              <h2 className="text-lg font-bold text-gray-700">My Transcript</h2>
+              <div className="p-3 bg-gray-50 rounded min-h-[80px] border border-gray-200">
+                {latestTranscript ? (
+                  <p className="text-gray-800">{latestTranscript}</p>
+                ) : (
+                  <p className="text-gray-400 italic">No speech yet.</p>
+                )}
+              </div>
 
-            <h2 className="text-lg font-semibold mt-4">Translations Received</h2>
-            <div className="border p-2 my-2 min-h-[80px] overflow-y-auto">
-              {translatedMessages.length === 0 ? (
-                <p className="text-gray-400 italic">No translations yet</p>
-              ) : (
-                translatedMessages.map((m, i) => (
-                  <p key={i} className="text-sm">
-                    <strong>{m.from.toUpperCase()} &rarr; {m.to.toUpperCase()}</strong>
-                    : {m.translated}{" "}
-                    <span className="text-xs text-gray-500">
-                      (orig: {m.original})
+              <h2 className="text-lg font-bold text-gray-700">
+                Translations Received
+              </h2>
+              <div className="p-3 bg-gray-50 rounded min-h-[100px] border border-gray-200 space-y-2 overflow-y-auto">
+                {translatedMessages.length === 0 && (
+                  <p className="text-gray-400 italic">No translations yet.</p>
+                )}
+                {translatedMessages.map((msg, idx) => (
+                  <div key={idx} className="text-sm text-gray-700">
+                    <span className="font-semibold">
+                      {msg.from.toUpperCase()} → {msg.to.toUpperCase()}:
+                    </span>{" "}
+                    <span className="font-medium">{msg.translated}</span>
+                    <span className="ml-2 text-xs text-gray-500 italic">
+                      (original: {msg.original})
                     </span>
-                  </p>
-                ))
-              )}
+                  </div>
+                ))}
+              </div>
+
+              <button
+                onClick={handleLeave}
+                className="mt-2 inline-block px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition"
+              >
+                Leave Call
+              </button>
             </div>
 
-            <button
-              onClick={handleLeave}
-              className="mt-2 inline-block px-4 py-2 bg-red-500 text-white rounded"
-            >
-              Leave
-            </button>
-          </div>
-
-          {/* right col: video chat */}
-          <div className="bg-white p-4 rounded shadow">
-            <VideoChat callId={joinedCall} socket={socket} />
+            {/* Right column: Video call */}
+            <div className="flex-1 bg-white p-4 rounded-md shadow">
+              <VideoChat callId={joinedCall} socket={socket} />
+            </div>
           </div>
         </div>
       </div>
     );
   }
 
-  // If not in a call
+  // =============== Otherwise, Lobby View ===============
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-400 to-blue-600 p-6">
-      <div className="max-w-xl mx-auto bg-white p-6 rounded shadow space-y-4">
-        <h1 className="text-2xl font-bold text-gray-800">
+    <div className="min-h-screen bg-gradient-to-br from-blue-400 to-blue-600 p-4 sm:p-6 lg:p-8">
+      <header className="mb-8 text-center">
+        <h1 className="text-3xl sm:text-4xl font-bold text-white mb-4">
           CultureConnect Lobby
         </h1>
-        <p className="text-gray-600">
-          Welcome {userName} (<em>{userLang}</em>)
+        <p className="text-white text-sm mb-4">
+          Welcome <span className="font-semibold">{userName}</span> (
+          <em>{userLang}</em>)
         </p>
-
         <button
           onClick={handleStartCall}
-          className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition"
+          className="bg-green-500 text-white py-2 px-6 rounded-full hover:bg-green-600 transition-colors duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 shadow-md"
         >
           Start New Call
         </button>
+      </header>
 
-        <h2 className="text-lg font-semibold text-gray-700 mt-4">
-          Or join an existing call:
-        </h2>
-
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
         {activeCalls.length === 0 && (
-          <p className="text-sm text-gray-400 italic">
+          <p className="text-center text-white text-sm col-span-full italic">
             No active calls at the moment
           </p>
         )}
-        <div className="space-y-2">
-          {activeCalls.map((c) => (
-            <div
-              key={c.callId}
-              className="flex items-center justify-between border rounded p-3"
-            >
-              <div className="text-sm text-gray-700">
-                <span className="font-semibold">
-                  {c.ownerName ?? "Unknown"}
-                </span>{" "}
-                (<em>{c.ownerLang ?? "??"}</em>) - ID: {c.callId}
+        {activeCalls.map((c) => (
+          <div
+            key={c.callId}
+            className="bg-white rounded-lg shadow-md overflow-hidden transition-transform duration-300 ease-in-out transform hover:scale-105"
+          >
+            <div className="p-4 sm:p-6">
+              <div className="flex items-center mb-4">
+                <div className="mr-3 w-8 h-8 flex items-center justify-center bg-gray-200 rounded-full text-sm font-semibold">
+                  {/* If we have c.ownerLang => extract country code, else ?? */}
+                  {c.ownerLang
+                    ? c.ownerLang.split("-")[0].toUpperCase()
+                    : "??"}
+                </div>
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-800">
+                    {c.ownerLang ?? "??"}
+                  </h2>
+                  <p className="text-sm text-gray-600 flex items-center">
+                    <svg
+                      className="w-4 h-4 mr-1"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                      />
+                    </svg>
+                    {c.ownerName ?? "Unknown"}
+                  </p>
+                </div>
               </div>
+
               <button
                 onClick={() => handleJoinCall(c.callId)}
-                className="px-2 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600"
+                className="w-full bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-600 transition-colors duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
               >
                 Join
               </button>
             </div>
-          ))}
-        </div>
+          </div>
+        ))}
       </div>
     </div>
   );
 }
 
-/** VideoChat component (unchanged) */
+/** VideoChat component - styling updated to match the "first snippet" style */
 function VideoChat({
   callId,
   socket,
@@ -305,13 +343,12 @@ function VideoChat({
 
     const audioTrack = localStream.getAudioTracks()[0];
     if (!audioTrack) return;
-    const audioOnly = new MediaStream([audioTrack]);
 
+    const audioOnly = new MediaStream([audioTrack]);
     let rec: MediaRecorder | null = null;
+
     try {
-      rec = new MediaRecorder(audioOnly, {
-        mimeType: "audio/webm; codecs=opus",
-      });
+      rec = new MediaRecorder(audioOnly, { mimeType: "audio/webm; codecs=opus" });
     } catch (err) {
       console.error("Failed to create MediaRecorder:", err);
     }
@@ -410,26 +447,28 @@ function VideoChat({
     }
   }
 
+  // Updated styles: match the "border-green-400" & "border-blue-400" from snippet #1
+  // plus consistent spacing / transitions
   return (
     <div>
-      <div className="flex gap-3">
+      <div className="flex flex-col md:flex-row items-start gap-4">
         <video
           ref={localVideoRef}
-          className="w-44 h-32 border-2 border-green-400 rounded"
+          className="w-64 border-2 border-green-400 rounded shadow"
           autoPlay
           muted
           playsInline
         />
         <video
           ref={remoteVideoRef}
-          className="w-44 h-32 border-2 border-blue-400 rounded"
+          className="w-64 border-2 border-blue-400 rounded shadow"
           autoPlay
           playsInline
         />
       </div>
       <button
         onClick={makeCall}
-        className="mt-2 inline-block px-3 py-1 bg-blue-500 text-white rounded"
+        className="mt-4 inline-block px-4 py-2 bg-blue-500 text-white font-medium rounded hover:bg-blue-600 transition"
       >
         Call in {callId}
       </button>
