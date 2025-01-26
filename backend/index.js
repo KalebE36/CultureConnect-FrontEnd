@@ -4,7 +4,7 @@ const http = require("http");
 const { Server } = require("socket.io");
 const { v4: uuidv4 } = require("uuid");
 const speech = require("@google-cloud/speech");
-const fetch = require("node-fetch");  // or "axios"
+const fetch = require("node-fetch"); // or "axios"
 
 const app = express();
 const server = http.createServer(app);
@@ -17,12 +17,11 @@ const speechClient = new speech.SpeechClient({
 
 /**
  * calls = {
- *   "abcd1234": {
+ *   callId123: {
  *       participants: [socketIdA, socketIdB],
- *       languages: {
- *         socketIdA: "en",
- *         socketIdB: "ru"
- *       }
+ *       languages: { socketIdA: "en", socketIdB: "ru" },
+ *       ownerName: "Alice",
+ *       ownerLang: "en-US",  // or short code
  *   }
  * }
  */
@@ -35,39 +34,53 @@ app.get("/", (req, res) => {
 io.on("connection", (socket) => {
   console.log("Client connected:", socket.id);
 
-  let recognizeStream = null;   // Google STT stream for this socket
-  let currentCallId = null;     // Which call the socket is in
-  let sttLanguage = "en-US";    // Google STT language
-  let shortLanguage = "en";     // e.g. "en", "ru" for Lingva
+  let recognizeStream = null;
+  let currentCallId = null;
 
-  // ----- 1. LANGUAGE SELECTION -----
+  // Default to en-US if not set
+  let sttLanguage = "en-US";
+  let shortLanguage = "en"; // e.g. "en"
+
+  // ========== 1. set-language ==========
   socket.on("set-language", (langCode) => {
     console.log(`Socket ${socket.id} set language to:`, langCode);
     sttLanguage = langCode || "en-US";
     shortLanguage = sttLanguage.split("-")[0] || "en";
 
-    // If the user is already in a call, update the calls object
+    // If they're already in a call, store it
     if (currentCallId && calls[currentCallId]) {
       calls[currentCallId].languages[socket.id] = shortLanguage;
     }
   });
 
-  // ----- 2. START CALL -----
-  socket.on("start-call", () => {
+  // ========== 2. Start call ==========
+  // We now expect the client to emit: socket.emit("start-call", { userName, userLang });
+  socket.on("start-call", ({ userName, userLang }) => {
+    // Fallbacks
+    const name = userName || "Unknown";
+    const lang = userLang || "en-US";
+
+    sttLanguage = lang;
+    shortLanguage = lang.split("-")[0] || "en";
+
     const callId = uuidv4().slice(0, 8);
+    // We store the host's name & language
     calls[callId] = {
       participants: [socket.id],
       languages: { [socket.id]: shortLanguage },
+      ownerName: name,
+      ownerLang: lang,
     };
+
     currentCallId = callId;
     socket.join(callId);
 
     socket.emit("call-id", callId);
     io.emit("call-started", callId);
-    console.log("Call started:", callId);
+    console.log(`Call started: ${callId} by ${name} (${lang})`);
   });
 
-  // ----- 3. JOIN CALL -----
+  // ========== 3. Join call ==========
   socket.on("join-call", (callId) => {
     if (!calls[callId]) {
       socket.emit("call-error", "Call does not exist!");
@@ -83,12 +96,18 @@ io.on("connection", (socket) => {
     console.log(`Socket ${socket.id} joined call ${callId}`);
   });
 
-  // ----- 4. LIST ACTIVE CALLS -----
+  // ========== 4. get-active-calls ==========
+  // Return an array of objects: { callId, ownerName, ownerLang }
   socket.on("get-active-calls", () => {
-    socket.emit("active-calls", Object.keys(calls));
+    const callList = Object.entries(calls).map(([id, callData]) => ({
+      callId: id,
+      ownerName: callData.ownerName,
+      ownerLang: callData.ownerLang,
+    }));
+    socket.emit("active-calls", callList);
   });
 
-  // ----- 5. WEBRTC SIGNALING -----
+  // ========== 5. WebRTC Signaling ==========
   socket.on("offer", ({ callId, sdp }) => {
     socket.to(callId).emit("offer", sdp);
   });
@@ -99,7 +118,7 @@ io.on("connection", (socket) => {
     socket.to(callId).emit("ice-candidate", candidate);
   });
 
-  // ----- 6. AUDIO DATA => STT => TRANSLATION -----
+  // ========== 6. AUDIO DATA => STT => TRANSLATION ==========
   socket.on("audio-data", (chunk) => {
     try {
       if (!recognizeStream) {
@@ -110,41 +129,35 @@ io.on("connection", (socket) => {
               sampleRateHertz: 48000,
               languageCode: sttLanguage,
             },
-            interimResults: true, // we still receive partial & final
+            interimResults: true,
           })
           .on("data", async (data) => {
             const result = data.results[0];
             if (!result) return;
-
             const transcript = result.alternatives[0]?.transcript;
             if (!transcript) return;
 
-            // *** Check if it's final ***
             const isFinal = result.isFinal;
-            // If you ONLY want final transcripts translated:
             if (!isFinal) {
-              // Optionally, you can still show partial transcripts to the speaker
-              socket.emit("transcript", transcript); 
-              return; 
+              // optionally show partial
+              socket.emit("transcript", transcript);
+              return;
             }
 
-            // It's final => let's do the translation
+            // final transcript
             console.log(`[${socket.id}] Final STT:`, transcript);
-
-            // 1) Emit original final transcript to speaker if desired
             socket.emit("transcript", transcript);
 
-            // 2) Translate to other participant(s)
             if (!currentCallId) return;
             const call = calls[currentCallId];
             if (!call) return;
 
             for (const otherSocketId of call.participants) {
-              if (otherSocketId === socket.id) continue; // skip speaker
-
+              if (otherSocketId === socket.id) continue;
               const targetLang = call.languages[otherSocketId] || "en";
+
               if (targetLang === shortLanguage) {
-                // same language, no need to call translation
+                // same language
                 io.to(otherSocketId).emit("translated-transcript", {
                   original: transcript,
                   translated: transcript,
@@ -154,14 +167,12 @@ io.on("connection", (socket) => {
                 continue;
               }
 
-              // Otherwise, call the translation API
+              // need translation
               const translation = await translateWithLingva(
                 shortLanguage,
                 targetLang,
                 transcript
               );
-
-              // Send the result
               io.to(otherSocketId).emit("translated-transcript", {
                 original: transcript,
                 translated: translation,
@@ -177,7 +188,7 @@ io.on("connection", (socket) => {
 
         console.log("Initialized STT stream for socket:", socket.id);
       }
-      // Write chunk
+
       const audioBuffer = Buffer.from(new Uint8Array(chunk));
       recognizeStream.write(audioBuffer);
     } catch (err) {
@@ -186,20 +197,17 @@ io.on("connection", (socket) => {
     }
   });
 
-  // ----- 7. DISCONNECT / CLEANUP -----
+  // ========== 7. DISCONNECT ==========
   socket.on("disconnect", () => {
     console.log("Client disconnected:", socket.id);
-
     if (recognizeStream) {
       recognizeStream.end();
       recognizeStream = null;
     }
-
     if (currentCallId && calls[currentCallId]) {
       const call = calls[currentCallId];
       call.participants = call.participants.filter((id) => id !== socket.id);
       delete call.languages[socket.id];
-
       if (call.participants.length === 0) {
         delete calls[currentCallId];
       }
@@ -207,7 +215,7 @@ io.on("connection", (socket) => {
   });
 });
 
-// Lingva helper
+// Helper for Lingva
 async function translateWithLingva(sourceLang, targetLang, text) {
   try {
     const url = `https://lingva.ml/api/v1/${sourceLang}/${targetLang}/${encodeURIComponent(
@@ -221,7 +229,7 @@ async function translateWithLingva(sourceLang, targetLang, text) {
     return data.translation || "";
   } catch (err) {
     console.error("Lingva Translate error:", err);
-    return text; // fallback to original text
+    return text; // fallback
   }
 }
 

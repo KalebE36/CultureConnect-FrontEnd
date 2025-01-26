@@ -4,17 +4,24 @@ import { getFirestore, doc, getDoc } from "firebase/firestore";
 import { firebaseApp } from "../../../config/firebaseConfig";
 import { useAuth } from "../../auth/hooks/useAuth";
 
+// We'll define a shape for the calls we receive from "active-calls"
+interface ActiveCall {
+  callId: string;
+  ownerName: string;
+  ownerLang: string;
+}
+
 /**
  * The main CallsList component:
  *  - Connects to the Socket.IO server
- *  - Fetches the user's language from Firestore
+ *  - Fetches the user's name & language from Firestore
  *  - Lets user start/join calls
  *  - Displays transcripts & translations
  *  - Renders VideoChat component once in a call
  */
 export default function CallsList() {
   const [socket, setSocket] = useState<Socket | null>(null);
-  const [activeCalls, setActiveCalls] = useState<string[]>([]);
+  const [activeCalls, setActiveCalls] = useState<ActiveCall[]>([]);
   const [joinedCall, setJoinedCall] = useState<string | null>(null);
 
   // Store the user's own recognized speech
@@ -24,101 +31,104 @@ export default function CallsList() {
     { original: string; translated: string; from: string; to: string }[]
   >([]);
 
+  const [userName, setUserName] = useState("Unknown");
+  const [userLang, setUserLang] = useState("en-US");
+
   const { user, loading } = useAuth(); // your custom auth hook
   const db = getFirestore(firebaseApp);
 
+  // 1. On mount (once auth is ready), fetch user info, connect Socket
   useEffect(() => {
-    // If still loading or no user, skip
     if (loading) return;
     if (!user) {
       console.log("No user logged in, skipping socket init...");
       return;
     }
 
-    // 1. Connect to Socket.IO server
-    const s = io("wss://cultureconnect-frontend-production.up.railway.app", {
-      transports: ["websocket"],
-      path: "/socket.io",
-    });
-    setSocket(s);
-
-    // 2. Fetch user language from Firestore, then emit "set-language"
     (async () => {
-      try {
-        const userRef = doc(db, "users", user.uid);
-        const snapshot = await getDoc(userRef);
+      // Fetch user doc from Firestore
+      const userRef = doc(db, "users", user.uid);
+      const snapshot = await getDoc(userRef);
 
-        let userLang = "en-US";
-        if (snapshot.exists()) {
-          const data = snapshot.data();
-          userLang = data.native_language || "en-US";
-          console.log("User language from Firestore:", userLang);
-        } else {
-          console.log("User doc not found, defaulting to en-US.");
-        }
-        s.emit("set-language", userLang);
-
-        // ========== Setup Socket Listeners ==========
-        s.on("active-calls", (calls: string[]) => {
-          setActiveCalls(calls);
-        });
-        s.on("call-started", (callId: string) => {
-          setActiveCalls((prev) => [...prev, callId]);
-        });
-        s.on("call-id", (callId: string) => {
-          console.log("Started call:", callId);
-          setJoinedCall(callId);
-        });
-        s.on("joined-call", (callId: string) => {
-          console.log("Joined call:", callId);
-          setJoinedCall(callId);
-        });
-
-        // 3. Listen for your own recognized transcript (already final or partial)
-        s.on("transcript", (text: string) => {
-          console.log("Transcript (my speech):", text);
-          setLatestTranscript(text);
-        });
-
-        // 4. Listen for other participants' translated transcripts
-        s.on("translated-transcript", (payload) => {
-          console.log("Received translated-transcript:", payload);
-          // payload = { original, translated, from, to }
-          setTranslatedMessages((prev) => [...prev, payload]);
-        });
-
-        s.on("speech-error", (err: string) => {
-          console.error("Speech error:", err);
-        });
-        s.on("call-error", (msg: string) => {
-          alert(msg);
-        });
-
-        // On mount, get existing calls
-        s.emit("get-active-calls");
-      } catch (err) {
-        console.error("Error fetching user doc:", err);
-        s.emit("set-language", "en-US"); // fallback
+      let displayName = user.displayName || "Unknown";
+      let nativeLang = "en-US";
+      if (snapshot.exists()) {
+        const data = snapshot.data();
+        displayName = data.name || displayName;
+        nativeLang = data.native_language || nativeLang;
       }
-    })();
 
-    // Cleanup on unmount
-    return () => {
-      s.disconnect();
-    };
+      // Store in local state
+      setUserName(displayName);
+      setUserLang(nativeLang);
+
+      // Connect to Socket.IO
+      const s = io("wss://cultureconnect-frontend-production.up.railway.app", {
+        transports: ["websocket"],
+        path: "/socket.io",
+      });
+      setSocket(s);
+
+      // 2. Once connected, set language
+      s.emit("set-language", nativeLang);
+
+      // Listen for calls, transcripts, etc.
+      s.on("active-calls", (calls: ActiveCall[]) => {
+        console.log("Got active calls:", calls);
+        setActiveCalls(calls);
+      });
+      s.on("call-started", (callId: string) => {
+        // new call
+        setActiveCalls((prev) => [...prev, { callId, ownerName: "??", ownerLang: "??" }]);
+      });
+      s.on("call-id", (callId: string) => {
+        console.log("Started call:", callId);
+        setJoinedCall(callId);
+      });
+      s.on("joined-call", (callId: string) => {
+        console.log("Joined call:", callId);
+        setJoinedCall(callId);
+      });
+
+      s.on("transcript", (text: string) => {
+        console.log("Transcript (my speech):", text);
+        setLatestTranscript(text);
+      });
+      s.on("translated-transcript", (payload) => {
+        console.log("Received translated-transcript:", payload);
+        setTranslatedMessages((prev) => [...prev, payload]);
+      });
+      s.on("speech-error", (err: string) => {
+        console.error("Speech error:", err);
+      });
+      s.on("call-error", (msg: string) => {
+        alert(msg);
+      });
+
+      // On mount, ask server for existing calls
+      s.emit("get-active-calls");
+
+      return () => {
+        s.disconnect();
+      };
+    })();
   }, [user, loading, db]);
 
-  // Start a new call
+  // 2. Start a new call => pass userName, userLang
   function handleStartCall() {
-    socket?.emit("start-call");
+    if (!socket) return;
+    socket.emit("start-call", {
+      userName,
+      userLang, 
+    });
   }
 
-  // Join an existing call
+  // 3. Join an existing call
   function handleJoinCall(callId: string) {
     socket?.emit("join-call", callId);
   }
 
-  // Optionally let user leave the call (simple approach: reload)
+  // Leave call (simple approach: reload)
   function handleLeave() {
     console.log("Leaving the video chat...");
     setJoinedCall(null);
@@ -128,7 +138,7 @@ export default function CallsList() {
   }
 
   if (joinedCall && socket) {
-    // If we've joined a call, show the VideoChat & transcripts
+    // If we've joined a call, show video chat
     return (
       <div className="min-h-screen p-4">
         <p>Joined call: {joinedCall}</p>
@@ -138,16 +148,16 @@ export default function CallsList() {
           <strong>My transcript:</strong> {latestTranscript}
         </p>
 
-        {/* Show translated transcripts from others */}
+        {/* Show translations from others */}
         <div style={{ marginTop: 10 }}>
           <h3>Translations Received:</h3>
           {translatedMessages.map((msg, idx) => (
             <p key={idx} style={{ margin: "4px 0" }}>
-              <em>
-                {msg.from} → {msg.to}
-              </em>
-              : <strong>{msg.translated}</strong>{" "}
-              <small style={{ color: "#666" }}>(original: {msg.original})</small>
+              <em>{msg.from} → {msg.to}</em>:
+              <strong> {msg.translated}</strong>{" "}
+              <small style={{ color: "#666" }}>
+                (original: {msg.original})
+              </small>
             </p>
           ))}
         </div>
@@ -157,11 +167,11 @@ export default function CallsList() {
     );
   }
 
-  // If not in a call, show list of calls or start a new one
+  // Not in a call => show list
   return (
     <div className="min-h-screen bg-[#78C3FB] p-4">
       <h1 className="text-center text-2xl font-bold text-white mb-4">
-        Video Call + Audio-Only STT + Translation
+        Calls (Welcome {userName} - {userLang})
       </h1>
 
       <div className="max-w-xl mx-auto bg-white p-6 rounded-md shadow space-y-4">
@@ -175,13 +185,13 @@ export default function CallsList() {
         <h2 className="text-lg font-semibold">Or join an existing call:</h2>
         {activeCalls.length === 0 && <p>No active calls right now.</p>}
         <ul className="space-y-2">
-          {activeCalls.map((callId) => (
+          {activeCalls.map(({ callId, ownerName, ownerLang }) => (
             <li key={callId}>
               <button
                 onClick={() => handleJoinCall(callId)}
                 className="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600"
               >
-                Join Call {callId}
+                Join "{ownerName}" ({ownerLang}) - ID: {callId}
               </button>
             </li>
           ))}
@@ -193,9 +203,9 @@ export default function CallsList() {
 
 /**
  * VideoChat component:
- *  - Grabs local video+audio
- *  - Sets up WebRTC for 2-person video calls
- *  - Also sets up a MediaRecorder for audio-only, sending "audio-data" to server
+ * - Acquire local video+audio
+ * - Setup WebRTC
+ * - Also record audio chunks => "audio-data"
  */
 function VideoChat({
   callId,
@@ -210,14 +220,11 @@ function VideoChat({
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
 
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
-  const [peerConnection, setPeerConnection] = useState<RTCPeerConnection | null>(
-    null
-  );
+  const [peerConnection, setPeerConnection] = useState<RTCPeerConnection | null>(null);
 
-  // ICE servers for NAT traversal
   const ICE_SERVERS = [{ urls: "stun:stun.l.google.com:19302" }];
 
-  // 1. Grab camera + mic on mount
+  // 1. Get local video+audio
   useEffect(() => {
     (async () => {
       try {
@@ -225,10 +232,7 @@ function VideoChat({
           video: true,
           audio: true,
         });
-        console.log("Got local stream with video+audio.");
         setLocalStream(stream);
-
-        // Show local video
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = stream;
         }
@@ -238,21 +242,17 @@ function VideoChat({
     })();
   }, []);
 
-  // 2. Once we have a localStream, set up a MediaRecorder for audio => STT
+  // 2. Send audio to server
   useEffect(() => {
     if (!localStream || !socket) return;
 
-    // Extract only the audio track
     const audioTrack = localStream.getAudioTracks()[0];
-    if (!audioTrack) {
-      console.warn("No audio track found in localStream!");
-      return;
-    }
+    if (!audioTrack) return;
     const audioOnlyStream = new MediaStream([audioTrack]);
 
     let mimeType = "audio/webm; codecs=opus";
     if (!MediaRecorder.isTypeSupported(mimeType)) {
-      console.warn(`Browser doesn't support ${mimeType}, falling back to audio/webm`);
+      console.warn(`Fallback to audio/webm`);
       mimeType = "audio/webm";
     }
 
@@ -264,32 +264,28 @@ function VideoChat({
       return;
     }
 
-    recorder.ondataavailable = async (event) => {
-      if (event.data && event.data.size > 0) {
-        const arrayBuffer = await event.data.arrayBuffer();
-        // Send to server for STT
+    recorder.ondataavailable = async (evt) => {
+      if (evt.data && evt.data.size > 0) {
+        const arrayBuffer = await evt.data.arrayBuffer();
         socket.emit("audio-data", arrayBuffer);
       }
     };
 
-    recorder.start(250); // send chunks every 250ms
-    console.log("Audio-only MediaRecorder started:", mimeType);
+    recorder.start(250);
+    console.log("Audio recorder started.");
 
-    // Cleanup on unmount
     return () => {
       if (recorder && recorder.state !== "inactive") {
-        console.log("Stopping MediaRecorder");
         recorder.stop();
       }
     };
   }, [localStream, socket]);
 
-  // 3. Setup WebRTC signaling via Socket.IO
+  // 3. WebRTC Signaling
   useEffect(() => {
     if (!socket) return;
 
     const handleOffer = async (remoteSdp: RTCSessionDescriptionInit) => {
-      console.log("Received offer from remote peer");
       const pc = createPeerConnection();
       try {
         await pc.setRemoteDescription(remoteSdp);
@@ -302,62 +298,55 @@ function VideoChat({
     };
 
     const handleAnswer = async (remoteSdp: RTCSessionDescriptionInit) => {
-      console.log("Received answer from remote peer");
       if (!peerConnection) return;
       try {
         await peerConnection.setRemoteDescription(remoteSdp);
       } catch (err) {
-        console.error("Error setting remote description:", err);
+        console.error("Error setting remote desc:", err);
       }
     };
 
-    const handleICECandidate = async (candidate: RTCIceCandidate) => {
-      console.log("Received ICE candidate:", candidate);
+    const handleICE = async (candidate: RTCIceCandidate) => {
       if (!peerConnection) return;
       try {
         await peerConnection.addIceCandidate(candidate);
       } catch (err) {
-        console.error("Error adding ICE candidate:", err);
+        console.error("Error adding ICE:", err);
       }
     };
 
-    // Listen for signaling
     socket.on("offer", handleOffer);
     socket.on("answer", handleAnswer);
-    socket.on("ice-candidate", handleICECandidate);
+    socket.on("ice-candidate", handleICE);
 
     return () => {
       socket.off("offer", handleOffer);
       socket.off("answer", handleAnswer);
-      socket.off("ice-candidate", handleICECandidate);
+      socket.off("ice-candidate", handleICE);
     };
   }, [socket, peerConnection]);
 
-  // Create a new RTCPeerConnection & add local tracks
+  // createPeerConnection
   function createPeerConnection() {
     const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
     if (localStream) {
       localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
     }
-
-    pc.ontrack = (event) => {
-      console.log("Remote track added:", event.streams[0]);
+    pc.ontrack = (evt) => {
       if (remoteVideoRef.current) {
-        remoteVideoRef.current.srcObject = event.streams[0];
+        remoteVideoRef.current.srcObject = evt.streams[0];
       }
     };
-
-    pc.onicecandidate = (event) => {
-      if (event.candidate) {
-        socket.emit("ice-candidate", { callId, candidate: event.candidate });
+    pc.onicecandidate = (evt) => {
+      if (evt.candidate) {
+        socket.emit("ice-candidate", { callId, candidate: evt.candidate });
       }
     };
-
     setPeerConnection(pc);
     return pc;
   }
 
-  // 4. Initiate the call (send offer)
+  // Make a call (offer)
   async function makeCall() {
     if (!socket) return;
     const pc = createPeerConnection();
@@ -371,7 +360,7 @@ function VideoChat({
   }
 
   return (
-    <div className="p-4">
+    <div style={{ marginTop: 20 }}>
       <div style={{ display: "flex", gap: "20px" }}>
         <video
           ref={localVideoRef}
@@ -388,10 +377,10 @@ function VideoChat({
         />
       </div>
 
-      <button onClick={makeCall} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded">
+      <button onClick={makeCall} style={{ marginTop: 20 }}>
         Call in {callId}
       </button>
-      <button onClick={onLeave} className="mt-4 ml-2 px-4 py-2 bg-red-600 text-white rounded">
+      <button onClick={onLeave} style={{ marginLeft: 10 }}>
         Leave Call
       </button>
     </div>
