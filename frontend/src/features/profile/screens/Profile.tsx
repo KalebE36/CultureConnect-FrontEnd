@@ -9,7 +9,7 @@ export default function ProfileEditor() {
 
   // Local state for profile fields
   const [name, setName] = useState("")
-  const [nativeLanguage, setNativeLanguage] = useState("en") // Default: English
+  const [nativeLanguage, setNativeLanguage] = useState("en-US") // Default: English
   const [avatar, setAvatar] = useState("/placeholder.svg")
   const [isLoading, setIsLoading] = useState(false)
   const [message, setMessage] = useState("")
@@ -25,7 +25,7 @@ export default function ProfileEditor() {
         if (snapshot.exists()) {
           const data = snapshot.data()
           setName(data.name || "")
-          setNativeLanguage(data.native_language || "en")
+          setNativeLanguage(data.native_language || "en-US")
           setAvatar(data.pfp || "/placeholder.svg")
         } else {
           console.log("User document not found in Firestore.")
@@ -156,12 +156,12 @@ export default function ProfileEditor() {
                 value={nativeLanguage}
                 onChange={(e) => setNativeLanguage(e.target.value)}
               >
-                <option value="en">English</option>
-                <option value="es">Spanish</option>
-                <option value="fr">French</option>
-                <option value="de">German</option>
-                <option value="ru">Russian</option>
-                <option value="ko">Korean</option>
+                <option value="en-US">English</option>
+                <option value="es-MX">Spanish</option>
+                <option value="fr-FR">French</option>
+                <option value="de-DE">German</option>
+                <option value="ru-RU">Russian</option>
+                <option value="ko-KR">Korean</option>
               </select>
             </div>
 
