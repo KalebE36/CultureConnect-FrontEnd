@@ -62,16 +62,16 @@ export default function CallsList() {
 
       // Listen for calls, transcripts, etc.
       s.on("active-calls", (calls: ActiveCall[]) => {
-        setTimeout(() =>{
-          console.log("Got active calls:", calls);
-          setActiveCalls(calls);
-        }, 2000);
+        console.log("Got active calls:", calls);
+        setActiveCalls(calls);
       });
       s.on("call-started", (callId: string) => {
-        setActiveCalls((prev) => [
-          ...prev,
-          { callId, ownerName: userName, ownerLang: userLang },
-        ]);
+        setTimeout(() =>{
+          setActiveCalls((prev) => [
+            ...prev,
+            { callId, ownerName: userName, ownerLang: userLang },
+          ]);
+        }, 2000);
       });
       s.on("call-id", (callId: string) => {
         console.log("Started call:", callId);
