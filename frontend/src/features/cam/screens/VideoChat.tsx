@@ -127,7 +127,7 @@ export default function VideoChat({
       socket.off("answer", handleAnswer);
       socket.off("ice-candidate", handleICECandidate);
     };
-  }, [socket, peerConnection]);
+  }, [socket, peerConnection, callId]);
 
   // Create peer connection
   function createPeerConnection() {
@@ -150,6 +150,7 @@ export default function VideoChat({
     return pc;
   }
 
+  // Start a call
   async function makeCall() {
     if (!socket) return;
     const pc = createPeerConnection();
@@ -163,14 +164,16 @@ export default function VideoChat({
   }
 
   return (
-    <div className="bg-[#78C3FB] min-h-screen flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-b from-[#587DDF] to-[#78C3FB] p-4 flex items-center justify-center">
+      {/* Semi-transparent card container */}
       <div className="w-full max-w-6xl bg-white/90 backdrop-blur-sm shadow-xl rounded-md">
         <div className="p-6 space-y-6">
+          {/* Title */}
           <h1 className="text-3xl font-bold text-center text-[#587DDF] mb-6">
             Video Chat
           </h1>
 
-          {/* Two video panels side by side */}
+          {/* Video Panels */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Local Video */}
             <div className="overflow-hidden shadow-md rounded-md">
@@ -198,7 +201,7 @@ export default function VideoChat({
             </div>
           </div>
 
-          {/* Transcripts + translations (optional) */}
+          {/* Transcripts + translations */}
           <div className="bg-white rounded-md shadow p-4">
             <h2 className="text-xl font-semibold mb-2 text-[#587DDF]">
               Live Translation
@@ -225,7 +228,7 @@ export default function VideoChat({
               onClick={makeCall}
               className="bg-[#587DDF] text-white px-6 py-3 rounded-full font-semibold hover:bg-[#587DDF]/90 transition-all transform hover:scale-105"
             >
-              Start Call {callId}
+              Start Call
             </button>
             <button
               onClick={onLeave}

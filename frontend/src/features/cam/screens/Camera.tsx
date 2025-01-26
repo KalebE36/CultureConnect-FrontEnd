@@ -130,66 +130,75 @@ export default function CallsList() {
   // If we've joined a call, show the video/translation interface
   if (joinedCall && socket) {
     return (
-      <div className="min-h-screen flex flex-col bg-gray-100 p-4">
-        <header className="mb-4">
-          <h1 className="text-xl font-semibold text-gray-700">
-            In Call: {joinedCall}
-          </h1>
-          <p className="text-gray-600">Hello {userName} - ({userLang})</p>
-        </header>
+      // Gradient background, center content
+      <div className="min-h-screen p-4 sm:p-6 lg:p-8 bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center">
+        {/* Semi-transparent card */}
+        <div className="w-full max-w-7xl bg-white/90 backdrop-blur-sm shadow-xl rounded-md p-6 space-y-6">
+          {/* Header */}
+          <header>
+            <h1 className="text-2xl font-semibold text-gray-700 mb-1">
+              In Call: {joinedCall}
+            </h1>
+            <p className="text-gray-600">
+              Hello <span className="font-medium">{userName}</span> (
+              <em>{userLang}</em>)
+            </p>
+          </header>
 
-        <div className="flex flex-col lg:flex-row gap-6">
-          {/* Left column: transcripts & translations */}
-          <div className="flex-1 bg-white p-4 rounded-md shadow">
-            <h2 className="text-lg font-bold mb-2 text-gray-700">
-              My Transcript
-            </h2>
-            <div className="p-3 bg-gray-50 rounded min-h-[80px] border border-gray-200 mb-4">
-              {latestTranscript ? (
-                <p className="text-gray-800">{latestTranscript}</p>
-              ) : (
-                <p className="text-gray-400 italic">No speech yet.</p>
-              )}
+          {/* Two-column layout for transcripts and video */}
+          <div className="flex flex-col lg:flex-row gap-6">
+            {/* Left column: transcripts & translations */}
+            <div className="flex-1 bg-white p-4 rounded-md shadow space-y-4">
+              <h2 className="text-lg font-bold text-gray-700">
+                My Transcript
+              </h2>
+              <div className="p-3 bg-gray-50 rounded min-h-[80px] border border-gray-200">
+                {latestTranscript ? (
+                  <p className="text-gray-800">{latestTranscript}</p>
+                ) : (
+                  <p className="text-gray-400 italic">No speech yet.</p>
+                )}
+              </div>
+
+              <h2 className="text-lg font-bold text-gray-700">
+                Translations Received
+              </h2>
+              <div className="p-3 bg-gray-50 rounded min-h-[100px] border border-gray-200 space-y-2 overflow-y-auto">
+                {translatedMessages.length === 0 && (
+                  <p className="text-gray-400 italic">No translations yet.</p>
+                )}
+                {translatedMessages.map((msg, idx) => (
+                  <div key={idx} className="text-sm text-gray-700">
+                    <span className="font-semibold">
+                      {msg.from.toUpperCase()} → {msg.to.toUpperCase()}:
+                    </span>{" "}
+                    <span className="font-medium">{msg.translated}</span>
+                    <span className="ml-2 text-xs text-gray-500 italic">
+                      (original: {msg.original})
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              <button
+                onClick={handleLeave}
+                className="mt-2 inline-block px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition"
+              >
+                Leave Call
+              </button>
             </div>
 
-            <h2 className="text-lg font-bold mb-2 text-gray-700">
-              Translations Received
-            </h2>
-            <div className="p-3 bg-gray-50 rounded min-h-[100px] border border-gray-200 space-y-2 overflow-y-auto">
-              {translatedMessages.length === 0 && (
-                <p className="text-gray-400 italic">No translations yet.</p>
-              )}
-              {translatedMessages.map((msg, idx) => (
-                <div key={idx} className="text-sm text-gray-700">
-                  <span className="font-semibold">
-                    {msg.from.toUpperCase()} → {msg.to.toUpperCase()}:
-                  </span>{" "}
-                  <span className="font-medium">{msg.translated}</span>
-                  <span className="ml-2 text-xs text-gray-500 italic">
-                    (original: {msg.original})
-                  </span>
-                </div>
-              ))}
+            {/* Right column: Video call */}
+            <div className="flex-1 bg-white p-4 rounded-md shadow">
+              <VideoChat callId={joinedCall} socket={socket} />
             </div>
-
-            <button
-              onClick={handleLeave}
-              className="mt-4 inline-block px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
-            >
-              Leave Call
-            </button>
-          </div>
-
-          {/* Right column: Video call */}
-          <div className="flex-1 bg-white p-4 rounded-md shadow">
-            <VideoChat callId={joinedCall} socket={socket} />
           </div>
         </div>
       </div>
     );
   }
 
-  // Otherwise, show the lobby list (grid style)
+  // Otherwise, show the "lobby" list (grid style)
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-400 to-blue-600 p-4 sm:p-6 lg:p-8">
       <header className="mb-8 text-center">
@@ -253,7 +262,7 @@ export default function CallsList() {
                     </p>
                   </div>
                 </div>
-                {/* ID: {callId} if you want to display callId somewhere */}
+                {/* Show callId if desired */}
                 <button
                   onClick={() => handleJoinCall(callId)}
                   className="w-full bg-blue-500 text-white py-2 px-4 rounded-md hover:bg-blue-600 transition-colors duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
