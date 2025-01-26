@@ -47,10 +47,8 @@ export default function CallsList() {
         nativeLang = data.native_language || nativeLang;
       }
 
-      setTimeout(() =>{
-        setUserName(displayName);
-        setUserLang(nativeLang);
-      }, 2000);
+      setUserName(displayName);
+      setUserLang(nativeLang);
 
       // Connect to Socket.IO
       const s = io("wss://cultureconnect-frontend-production.up.railway.app", {
@@ -64,8 +62,10 @@ export default function CallsList() {
 
       // Listen for calls, transcripts, etc.
       s.on("active-calls", (calls: ActiveCall[]) => {
-        console.log("Got active calls:", calls);
-        setActiveCalls(calls);
+        setTimeout(() =>{
+          console.log("Got active calls:", calls);
+          setActiveCalls(calls);
+        }, 2000);
       });
       s.on("call-started", (callId: string) => {
         setActiveCalls((prev) => [
