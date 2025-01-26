@@ -36,7 +36,7 @@ export default function CallsList() {
     }
 
     // 2. Connect to your Socket.IO server
-    const s = io("http://localhost:3000wss://cultureconnect-frontend-production.up.railway.app", {
+    const s = io("wss://cultureconnect-frontend-production.up.railway.app", {
       transports: ["websocket"],
       path: "/socket.io",
     });
