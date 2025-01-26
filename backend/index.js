@@ -2,7 +2,8 @@
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
-const { v4: uuidv4 } = require("uuid"); // for unique call IDs
+const { v4: uuidv4 } = require("uuid");
+const speech = require("@google-cloud/speech");
 
 const app = express();
 const server = http.createServer(app);
@@ -10,85 +11,113 @@ const io = new Server(server, {
   cors: { origin: "*" },
 });
 
-// In-memory "active calls" store
-// In a real app, you might use a database or more sophisticated tracking
-const calls = {}; // { callId: true }
+// Google Cloud Speech
+const speechClient = new speech.SpeechClient({
+  keyFilename: "service-account-key.json", // your GCP credentials
+});
 
+// In-memory call store
+const calls = {}; // e.g. { "callId123": true }
 
-// test
 app.get("/", (req, res) => {
-  res.send("Hello from the Socket.IO server!");
+  res.send("WebRTC Video + Audio-only STT server");
 });
 
 io.on("connection", (socket) => {
-  console.log("New client connected:", socket.id);
+  console.log("Client connected:", socket.id);
 
-  // Just a test route so we know server is up
-  
+  let recognizeStream = null;
 
-  // 1. Start a new call
+  // 1. Start call
   socket.on("start-call", () => {
-    const callId = uuidv4().slice(0, 8); // short ID
+    const callId = uuidv4().slice(0, 8);
     calls[callId] = true;
     socket.join(callId);
 
-    // Tell the caller which callId they got
     socket.emit("call-id", callId);
-
-    // Broadcast to everyone that a new call has started
     io.emit("call-started", callId);
-    console.log(`Call started: ${callId}`);
+
+    console.log("Call started:", callId);
   });
 
-  // 2. Join an existing call
+  // 2. Join call
   socket.on("join-call", (callId) => {
     if (!calls[callId]) {
-      // If call doesn't exist, notify the user
       socket.emit("call-error", "Call does not exist!");
       return;
     }
     socket.join(callId);
-    console.log(`Socket ${socket.id} joined call ${callId}`);
     socket.emit("joined-call", callId);
+    console.log(`Socket ${socket.id} joined call ${callId}`);
   });
 
-  // 3. Return the list of active calls
+  // 3. Active calls
   socket.on("get-active-calls", () => {
     socket.emit("active-calls", Object.keys(calls));
   });
 
-  // ========== WebRTC Signaling Events ==========
-  //
-  // The client will now emit { callId, sdp } or { callId, candidate }
-  // so we can forward them to everyone else in that call room.
-  //
-
-  socket.on("offer", (payload) => {
-    // payload = { callId, sdp }
-    console.log("Offer received for callId:", payload.callId);
-    socket.to(payload.callId).emit("offer", payload.sdp);
+  // ========== WebRTC Signaling ==========
+  socket.on("offer", ({ callId, sdp }) => {
+    socket.to(callId).emit("offer", sdp);
   });
 
-  socket.on("answer", (payload) => {
-    // payload = { callId, sdp }
-    console.log("Answer received for callId:", payload.callId);
-    socket.to(payload.callId).emit("answer", payload.sdp);
+  socket.on("answer", ({ callId, sdp }) => {
+    socket.to(callId).emit("answer", sdp);
   });
 
-  socket.on("ice-candidate", (payload) => {
-    // payload = { callId, candidate }
-    socket.to(payload.callId).emit("ice-candidate", payload.candidate);
+  socket.on("ice-candidate", ({ callId, candidate }) => {
+    socket.to(callId).emit("ice-candidate", candidate);
   });
 
-  // Handle disconnect
+  // ========== Audio Data to STT ==========
+  socket.on("audio-data", (chunk) => {
+    try {
+      if (!recognizeStream) {
+        recognizeStream = speechClient
+          .streamingRecognize({
+            config: {
+              encoding: "WEBM_OPUS",
+              sampleRateHertz: 48000, // typical for Opus
+              languageCode: "en-US",
+            },
+            interimResults: true,
+          })
+          .on("data", (data) => {
+            const transcript = data.results[0]?.alternatives[0]?.transcript;
+            if (transcript) {
+              // Return transcript just to the sending socket.
+              // (Or you could broadcast to callId if you want everyone to see the transcript.)
+              socket.emit("transcript", transcript);
+            }
+          })
+          .on("error", (err) => {
+            console.error("Speech error:", err);
+            socket.emit("speech-error", err.toString());
+          });
+
+        console.log("Initialized STT stream for socket:", socket.id);
+      }
+
+      // Write new audio chunk
+      const audioBuffer = Buffer.from(new Uint8Array(chunk));
+      recognizeStream.write(audioBuffer);
+    } catch (err) {
+      console.error("audio-data error:", err);
+      socket.emit("speech-error", err.toString());
+    }
+  });
+
+  // Cleanup on disconnect
   socket.on("disconnect", () => {
     console.log("Client disconnected:", socket.id);
-    // (Optional) You might want to check if the user was the last one in a call
-    // and remove that call from "calls" if it's now empty. That takes extra logic.
+    if (recognizeStream) {
+      recognizeStream.end();
+      recognizeStream = null;
+    }
   });
 });
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-  console.log(`Server listening on port ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
