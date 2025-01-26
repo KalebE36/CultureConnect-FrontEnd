@@ -27,6 +27,13 @@ io.on("connection", (socket) => {
   console.log("Client connected:", socket.id);
 
   let recognizeStream = null;
+  let chosenLanguage = null;
+  
+  // ========== 1. LANGUAGE SELECTION ==========
+  socket.on("set-language", (langCode) => {
+    console.log(`Socket ${socket.id} set language to:`, langCode);
+    chosenLanguage = langCode; // store it in the socket
+  });
 
   // 1. Start call
   socket.on("start-call", () => {
@@ -78,7 +85,7 @@ io.on("connection", (socket) => {
             config: {
               encoding: "WEBM_OPUS",
               sampleRateHertz: 48000, // typical for Opus
-              languageCode: "en-US",
+              languageCode: chosenLanguage || "en-US",
             },
             interimResults: true,
           })
