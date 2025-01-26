@@ -14,8 +14,11 @@ export default function ProfileEditor() {
   const [name, setName] = useState("")
   const [nativeLanguage, setNativeLanguage] = useState("en-US") // Default: English
   const [avatar, setAvatar] = useState("/placeholder.svg")
+
   const [isLoading, setIsLoading] = useState(false)
   const [message, setMessage] = useState("")
+  // NEW: track the countdown in seconds
+  const [countdown, setCountdown] = useState(0)
 
   useEffect(() => {
     if (!user || loading) return
@@ -56,12 +59,10 @@ export default function ProfileEditor() {
         pfp: avatar,
       })
 
-      setMessage("Profile updated successfully!")
+      // Set the initial countdown and success message
+      setCountdown(3) // or 2, or however many seconds you want
+      setMessage(`Profile updated successfully! Redirecting in 3 seconds...`)
 
-      // Navigate after 2 seconds
-      setTimeout(() => {
-        navigate("/camera")
-      }, 2000)
     } catch (error) {
       console.error("Error updating profile:", error)
       setMessage("Error updating profile. Please try again.")
@@ -69,6 +70,33 @@ export default function ProfileEditor() {
       setIsLoading(false)
     }
   }
+
+  // EFFECT: Each time `countdown` changes, update the message and eventually navigate
+  useEffect(() => {
+    // If no countdown is set (0), do nothing
+    if (countdown <= 0) return
+
+    // Update the message to reflect the current countdown
+    setMessage(
+      `Profile updated successfully! Redirecting in ${countdown} second${
+        countdown === 1 ? "" : "s"
+      }...`
+    )
+
+    // Create a 1-second timer
+    const timer = setTimeout(() => {
+      // If we've reached the end, navigate away
+      if (countdown === 1) {
+        navigate("/camera")
+      } else {
+        // Otherwise, decrement
+        setCountdown((prev) => prev - 1)
+      }
+    }, 1000)
+
+    // Cleanup
+    return () => clearTimeout(timer)
+  }, [countdown, navigate])
 
   // Handle avatar upload
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -88,7 +116,6 @@ export default function ProfileEditor() {
       const auth = getAuth(firebaseApp)
       await signOut(auth)
       console.log("Logged out successfully")
-      // Optionally navigate user to a different page after logout:
       navigate("/")
     } catch (error) {
       console.error("Error logging out:", error)
