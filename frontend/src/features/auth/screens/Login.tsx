@@ -29,7 +29,7 @@ export default function LoginScreen() {
               account_id: accountId,
               learning_language: "English", // Default value, update as needed
               name: user.displayName || "Anonymous",
-              native_language: "Unknown", // Default value, update as needed
+              native_language: "en-US", // Default value, update as needed
               pfp: user.photoURL || "", // Use Google profile picture if available
             });
             console.log("New user added to Firestore");
