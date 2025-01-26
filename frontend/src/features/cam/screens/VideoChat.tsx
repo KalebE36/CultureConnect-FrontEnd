@@ -225,7 +225,7 @@ export default function VideoChat({
               onClick={makeCall}
               className="bg-[#587DDF] text-white px-6 py-3 rounded-full font-semibold hover:bg-[#587DDF]/90 transition-all transform hover:scale-105"
             >
-              Call in {callId}
+              Start Call {callId}
             </button>
             <button
               onClick={onLeave}
