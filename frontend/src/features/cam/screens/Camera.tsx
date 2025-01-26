@@ -10,7 +10,7 @@ export default function CallsList() {
   const [latestTranscript, setLatestTranscript] = useState("");
 
   useEffect(() => {
-    const s = io("http://localhost:3000", {
+    const s = io("wss://cultureconnect-frontend-production.up.railway.app", {
       transports: ["websocket"],
       path: "/socket.io",
     });
