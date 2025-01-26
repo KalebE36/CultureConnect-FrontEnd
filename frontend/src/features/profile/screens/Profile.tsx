@@ -1,135 +1,186 @@
-import React, { useEffect, useState } from "react";
-import { getFirestore, doc, getDoc, updateDoc } from "firebase/firestore";
-import { firebaseApp } from "../../../config/firebaseConfig"; // adjust path as needed
-import { useAuth } from "../../auth/hooks/useAuth";             // your custom Auth hook
+import React, { useEffect, useState } from "react"
+import { getFirestore, doc, getDoc, updateDoc } from "firebase/firestore"
+import { firebaseApp } from "../../../config/firebaseConfig"
+import { useAuth } from "../../auth/hooks/useAuth"
 
-export default function Profile() {
-  const { user, loading } = useAuth();  // your custom hook returning {user, loading}
-  const db = getFirestore(firebaseApp);
+export default function ProfileEditor() {
+  const { user, loading } = useAuth()
+  const db = getFirestore(firebaseApp)
 
   // Local state for profile fields
-  const [name, setName] = useState("");
-  const [nativeLanguage, setNativeLanguage] = useState("");
-  const [pfp, setPfp] = useState("");
-  const [status, setStatus] = useState(""); // For status messages (optional)
+  const [name, setName] = useState("")
+  const [nativeLanguage, setNativeLanguage] = useState("en") // Default: English
+  const [avatar, setAvatar] = useState("/placeholder.svg")
+  const [isLoading, setIsLoading] = useState(false)
+  const [message, setMessage] = useState("")
 
   useEffect(() => {
-    // If no user or still loading, do nothing
-    if (!user || loading) return;
+    if (!user || loading) return
 
-    // Fetch the user doc from Firestore using the user's UID
-    // e.g., users/{uid}
     const fetchUserData = async () => {
       try {
-        const userRef = doc(db, "users", user.uid);
-        const snapshot = await getDoc(userRef);
+        const userRef = doc(db, "users", user.uid)
+        const snapshot = await getDoc(userRef)
 
         if (snapshot.exists()) {
-          const data = snapshot.data();
-          // Populate local state
-          setName(data.name || "");
-          setNativeLanguage(data.native_language || "");
-          setPfp(data.pfp || "");
+          const data = snapshot.data()
+          setName(data.name || "")
+          setNativeLanguage(data.native_language || "en")
+          setAvatar(data.pfp || "/placeholder.svg")
         } else {
-          // If doc doesn't exist, you might create it or show a message
-          console.log("User doc not found in Firestore");
+          console.log("User document not found in Firestore.")
         }
       } catch (error) {
-        console.error("Error fetching user data:", error);
+        console.error("Error fetching user data:", error)
       }
-    };
-
-    fetchUserData();
-  }, [user, loading, db]);
-
-  // Handle saving updated profile data
-  const handleSave = async () => {
-    if (!user) return;
-    try {
-      const userRef = doc(db, "users", user.uid);
-      await updateDoc(userRef, {
-        name: name,
-        native_language: nativeLanguage,
-        pfp: pfp,
-      });
-      setStatus("Profile updated successfully!");
-    } catch (error) {
-      console.error("Error updating user profile:", error);
-      setStatus("Error updating profile. Check console for details.");
     }
-  };
 
-  // If still checking auth state, show a loading message
-  if (loading) {
-    return <p>Loading profile...</p>;
+    fetchUserData()
+  }, [user, loading, db])
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!user) return
+
+    setIsLoading(true)
+    setMessage("")
+
+    try {
+      const userRef = doc(db, "users", user.uid)
+      await updateDoc(userRef, {
+        name,
+        native_language: nativeLanguage,
+        pfp: avatar,
+      })
+
+      setMessage("Profile updated successfully!")
+    } catch (error) {
+      console.error("Error updating profile:", error)
+      setMessage("Error updating profile. Please try again.")
+    } finally {
+      setIsLoading(false)
+    }
   }
 
-  // If no user is logged in, show a prompt
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setAvatar(reader.result as string)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  if (loading) {
+    return <p className="text-center mt-4">Loading profile...</p>
+  }
+
   if (!user) {
-    return <p>Please sign in to view your profile.</p>;
+    return <p className="text-center mt-4">Please sign in to edit your profile.</p>
   }
 
   return (
-    <main className="p-4 max-w-md mx-auto">
-      <h1 className="text-xl font-bold mb-4">Your Profile</h1>
-
-      {/* Name */}
-      <label className="block mb-2 font-semibold" htmlFor="name">
-        Name
-      </label>
-      <input
-        id="name"
-        type="text"
-        className="border p-2 w-full mb-4"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-      />
-
-      {/* Native Language */}
-      <label className="block mb-2 font-semibold" htmlFor="nativeLanguage">
-        Native Language
-      </label>
-      <input
-        id="nativeLanguage"
-        type="text"
-        className="border p-2 w-full mb-4"
-        value={nativeLanguage}
-        onChange={(e) => setNativeLanguage(e.target.value)}
-      />
-
-      {/* Profile Picture URL */}
-      <label className="block mb-2 font-semibold" htmlFor="pfp">
-        Profile Picture URL
-      </label>
-      <input
-        id="pfp"
-        type="text"
-        className="border p-2 w-full mb-4"
-        value={pfp}
-        onChange={(e) => setPfp(e.target.value)}
-      />
-
-      {/* Display the profile picture if present */}
-      {pfp && (
-        <div className="mb-4">
-          <img
-            src={pfp}
-            alt="Profile"
-            className="max-w-xs rounded border"
-          />
+    <div className="min-h-screen flex items-center justify-center bg-[#78C3FB]">
+      {/* Tailwind "Card" Equivalent */}
+      <div className="w-full max-w-md bg-white rounded-md shadow-md">
+        {/* Header */}
+        <div className="border-b border-gray-200 p-4">
+          <h2 className="text-2xl font-bold text-center">Edit Profile</h2>
         </div>
-      )}
 
-      {/* Save Button */}
-      <button
-        className="bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600"
-        onClick={handleSave}
-      >
-        Save Changes
-      </button>
+        {/* Content */}
+        <div className="p-6">
+          <form onSubmit={handleSave} className="space-y-6">
+            {/* Avatar Section */}
+            <div className="flex flex-col items-center space-y-4">
+              {/* Avatar Image or Fallback */}
+              {avatar ? (
+                <img
+                  src={avatar}
+                  alt="Profile"
+                  className="w-24 h-24 rounded-full object-cover"
+                />
+              ) : (
+                <div className="w-24 h-24 rounded-full bg-gray-200 flex items-center justify-center text-gray-500">
+                  PFP
+                </div>
+              )}
 
-      {/* Status */}
-      {status && <p className="mt-4 text-green-600">{status}</p>}
-    </main>
-  );
+              {/* Upload Button */}
+              <label
+                htmlFor="avatar"
+                className="cursor-pointer text-[#587DDF] hover:text-[#587DDF]/80"
+              >
+                Change Profile Picture
+              </label>
+              <input
+                id="avatar"
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleAvatarChange}
+              />
+            </div>
+
+            {/* Name Field */}
+            <div>
+              <label
+                htmlFor="name"
+                className="block mb-1 font-medium text-gray-700"
+              >
+                Name
+              </label>
+              <input
+                id="name"
+                type="text"
+                className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-400"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Enter your name"
+              />
+            </div>
+
+            {/* Native Language Field */}
+            <div>
+              <label
+                htmlFor="language"
+                className="block mb-1 font-medium text-gray-700"
+              >
+                Native Language
+              </label>
+              <select
+                id="language"
+                className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-400"
+                value={nativeLanguage}
+                onChange={(e) => setNativeLanguage(e.target.value)}
+              >
+                <option value="en">English</option>
+                <option value="es">Spanish</option>
+                <option value="fr">French</option>
+                <option value="de">German</option>
+                <option value="ru">Russian</option>
+                <option value="ko">Korean</option>
+              </select>
+            </div>
+
+            {/* Submit Button */}
+            <button
+              type="submit"
+              className="w-full py-2 px-4 rounded bg-[#587DDF] text-white font-semibold hover:bg-[#587DDF]/80 focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:opacity-50"
+              disabled={isLoading}
+            >
+              {isLoading ? "Saving..." : "Save Changes"}
+            </button>
+
+            {/* Status Message */}
+            {message && (
+              <p className="text-center text-green-600 font-semibold">{message}</p>
+            )}
+          </form>
+        </div>
+      </div>
+    </div>
+  )
 }
