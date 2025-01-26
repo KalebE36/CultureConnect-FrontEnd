@@ -57,6 +57,7 @@ export default function HomeScreen() {
           <option value="es">Spanish</option>
           <option value="fr">French</option>
           <option value="de">German</option>
+          <option value="ru">Russian</option>
           {/* add more as needed */}
         </select>
       </div>
@@ -75,6 +76,7 @@ export default function HomeScreen() {
           <option value="es">Spanish</option>
           <option value="fr">French</option>
           <option value="de">German</option>
+          <option value="ru">Russian</option>
           {/* add more as needed */}
         </select>
       </div>
