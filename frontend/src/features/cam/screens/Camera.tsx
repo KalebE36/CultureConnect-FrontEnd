@@ -63,7 +63,7 @@ export default function CallsList() {
       setUserLang(nativeLang);
 
       // Connect to Socket.IO
-      const s = io("http://localhost:3000", {
+      const s = io("wss://cultureconnect-frontend-production.up.railway.app", {
         transports: ["websocket"],
         path: "/socket.io",
       });
