@@ -2,13 +2,14 @@ import React, { useEffect, useState } from "react"
 import { getFirestore, doc, getDoc, updateDoc } from "firebase/firestore"
 import { firebaseApp } from "../../../config/firebaseConfig"
 import { useAuth } from "../../auth/hooks/useAuth"
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom"
+import { getAuth, signOut } from "firebase/auth"
 
 export default function ProfileEditor() {
   const { user, loading } = useAuth()
   const db = getFirestore(firebaseApp)
-  const navigate = useNavigate();
-  
+  const navigate = useNavigate()
+
   // Local state for profile fields
   const [name, setName] = useState("")
   const [nativeLanguage, setNativeLanguage] = useState("en-US") // Default: English
@@ -57,8 +58,9 @@ export default function ProfileEditor() {
 
       setMessage("Profile updated successfully!")
 
-      setTimeout(()=>{
-        navigate("/camera");
+      // Navigate after 2 seconds
+      setTimeout(() => {
+        navigate("/camera")
       }, 2000)
     } catch (error) {
       console.error("Error updating profile:", error)
@@ -68,6 +70,7 @@ export default function ProfileEditor() {
     }
   }
 
+  // Handle avatar upload
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
@@ -76,6 +79,19 @@ export default function ProfileEditor() {
         setAvatar(reader.result as string)
       }
       reader.readAsDataURL(file)
+    }
+  }
+
+  // Log out function
+  const handleLogout = async () => {
+    try {
+      const auth = getAuth(firebaseApp)
+      await signOut(auth)
+      console.log("Logged out successfully")
+      // Optionally navigate user to a different page after logout:
+      navigate("/")
+    } catch (error) {
+      console.error("Error logging out:", error)
     }
   }
 
@@ -88,7 +104,7 @@ export default function ProfileEditor() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#78C3FB]">
+    <div className="relative min-h-screen flex items-center justify-center bg-[#78C3FB]">
       {/* Tailwind "Card" Equivalent */}
       <div className="w-full max-w-md bg-white rounded-md shadow-md">
         {/* Header */}
@@ -187,6 +203,14 @@ export default function ProfileEditor() {
           </form>
         </div>
       </div>
+
+      {/* Logout Button - positioned absolutely at the bottom-right */}
+      <button
+        onClick={handleLogout}
+        className="absolute bottom-4 right-4 px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition focus:outline-none focus:ring-2 focus:ring-red-400"
+      >
+        Log Out
+      </button>
     </div>
   )
 }
