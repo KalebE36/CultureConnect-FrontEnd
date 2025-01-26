@@ -1,94 +1,116 @@
-// src/CallsList.tsx
-
 import React, { useEffect, useState, useRef } from "react";
 import { io, Socket } from "socket.io-client";
 import { getFirestore, doc, getDoc } from "firebase/firestore";
 import { firebaseApp } from "../../../config/firebaseConfig";
 import { useAuth } from "../../auth/hooks/useAuth";
 
+/**
+ * Main CallsList component that:
+ * - Sets up the Socket.IO connection
+ * - Fetches user's language from Firestore
+ * - Lets user Start/Join calls
+ * - Displays transcripts and translations
+ * - Renders <VideoChat> once in a call
+ */
 export default function CallsList() {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [activeCalls, setActiveCalls] = useState<string[]>([]);
   const [joinedCall, setJoinedCall] = useState<string | null>(null);
-  const [latestTranscript, setLatestTranscript] = useState("");
 
-  const { user, loading } = useAuth(); // from your custom hook
+  // We'll store the user’s own transcript (what they say)
+  const [latestTranscript, setLatestTranscript] = useState("");
+  // We'll store the translated messages from others
+  const [translatedMessages, setTranslatedMessages] = useState<
+    { original: string; translated: string; from: string; to: string }[]
+  >([]);
+
+  const { user, loading } = useAuth();
   const db = getFirestore(firebaseApp);
 
   useEffect(() => {
-    // If we're still "loading" auth, or no user is logged in, don't connect yet
+    // 1. If auth is still loading or no user, skip for now
     if (loading) return;
     if (!user) {
-      console.log("No user logged in yet, or user is null. Skipping socket init...");
+      console.log("No user logged in, skipping socket init");
       return;
     }
 
-    // 1. Connect to your Socket.IO server
-    const s = io("wss://cultureconnect-frontend-production.up.railway.app", {
+    // 2. Connect to your Socket.IO server
+    const s = io("http://localhost:3000wss://cultureconnect-frontend-production.up.railway.app", {
       transports: ["websocket"],
       path: "/socket.io",
     });
-
     setSocket(s);
 
-    // 2. Fetch user language from Firestore and emit to the server
+    // 3. Fetch user language from Firestore, then emit "set-language"
     (async () => {
       try {
         const userRef = doc(db, "users", user.uid);
         const snapshot = await getDoc(userRef);
 
+        let userLang = "en-US";
         if (snapshot.exists()) {
           const data = snapshot.data();
-          const userLang = data.native_language || "en-US";
+          userLang = data.native_language || "en-US";
           console.log("User language from Firestore:", userLang);
-
-          // Tell the server which language we want to use for STT
-          s.emit("set-language", userLang);
         } else {
           console.log("User doc not found in Firestore, defaulting to en-US.");
-          s.emit("set-language", "en-US");
         }
+        // Tell the server which language we want to use for STT
+        s.emit("set-language", userLang);
+
+        // =========== Set up ALL socket listeners here ===========
+
+        // Active calls
+        s.on("active-calls", (calls: string[]) => {
+          setActiveCalls(calls);
+        });
+
+        // A new call started
+        s.on("call-started", (callId: string) => {
+          setActiveCalls((prev) => [...prev, callId]);
+        });
+
+        // We started a call => server gives us the callId
+        s.on("call-id", (callId: string) => {
+          console.log("Started call:", callId);
+          setJoinedCall(callId);
+        });
+
+        // We join a call => server confirms
+        s.on("joined-call", (callId: string) => {
+          console.log("Joined call:", callId);
+          setJoinedCall(callId);
+        });
+
+        // 4. Listen for normal transcripts (the speaker's own STT)
+        s.on("transcript", (text: string) => {
+          console.log("Transcript (my speech):", text);
+          setLatestTranscript(text);
+        });
+
+        // 5. Listen for translated transcripts from others
+        s.on("translated-transcript", (payload) => {
+          // payload = { original, translated, from, to }
+          console.log("Received translated-transcript:", payload);
+          setTranslatedMessages((prev) => [...prev, payload]);
+        });
+
+        // Errors
+        s.on("speech-error", (err: string) => {
+          console.error("Speech error:", err);
+        });
+        s.on("call-error", (msg: string) => {
+          alert(msg);
+        });
+
+        // On initial mount, ask server for existing calls
+        s.emit("get-active-calls");
       } catch (err) {
         console.error("Error fetching user doc:", err);
         // If an error occurs, default to English
         s.emit("set-language", "en-US");
       }
-
-      // Now that we've set the language, set up your other socket listeners
-      // (You could also set these up immediately—doesn't hurt.)
-      s.on("active-calls", (calls: string[]) => {
-        setActiveCalls(calls);
-      });
-
-      s.on("call-started", (callId: string) => {
-        setActiveCalls((prev) => [...prev, callId]);
-      });
-
-      s.on("call-id", (callId: string) => {
-        console.log("Started call:", callId);
-        setJoinedCall(callId);
-      });
-
-      s.on("joined-call", (callId: string) => {
-        console.log("Joined call:", callId);
-        setJoinedCall(callId);
-      });
-
-      s.on("transcript", (text: string) => {
-        console.log("Transcript:", text);
-        setLatestTranscript(text);
-      });
-
-      s.on("speech-error", (err: string) => {
-        console.error("Speech error:", err);
-      });
-
-      s.on("call-error", (msg: string) => {
-        alert(msg);
-      });
-
-      // On mount, ask server for existing calls
-      s.emit("get-active-calls");
     })();
 
     // Cleanup on unmount
@@ -107,14 +129,37 @@ export default function CallsList() {
     socket?.emit("join-call", callId);
   }
 
-  // If we've joined a call, show the <VideoChat> component
+  // If we've joined a call, we render the <VideoChat> component
+  // plus some UI to show transcripts/translations
   return (
     <div style={{ padding: 20 }}>
-      <h1>Video Call + Audio-Only STT</h1>
+      <h1>Video Call + Audio-Only STT + Translation</h1>
+
       {joinedCall ? (
         <div>
           <p>Joined call: {joinedCall}</p>
-          <p>Latest transcript: {latestTranscript}</p>
+
+          {/* Display own STT transcript */}
+          <p>
+            <strong>My transcript:</strong> {latestTranscript}
+          </p>
+
+          {/* Display translations from others */}
+          <div style={{ marginTop: 10 }}>
+            <h3>Translations Received:</h3>
+            {translatedMessages.map((msg, idx) => (
+              <p key={idx} style={{ margin: "4px 0" }}>
+                <em>
+                  {msg.from} → {msg.to}
+                </em>
+                : <strong>{msg.translated}</strong>{" "}
+                <small style={{ color: "#888" }}>
+                  (original: {msg.original})
+                </small>
+              </p>
+            ))}
+          </div>
+
           {/* Render the video chat if socket is ready */}
           {socket && <VideoChat callId={joinedCall} socket={socket} />}
         </div>
@@ -137,9 +182,12 @@ export default function CallsList() {
   );
 }
 
-// ------------------------------
-// VideoChat Component (unchanged)
-// ------------------------------
+/**
+ * VideoChat:
+ * - Gets local video+audio
+ * - Creates RTCPeerConnection for video calls
+ * - Sets up a MediaRecorder for the *audio* track, sends "audio-data" to server
+ */
 function VideoChat({
   callId,
   socket,
@@ -147,24 +195,23 @@ function VideoChat({
   callId: string;
   socket: Socket;
 }) {
-  // Refs to video elements
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
 
-  // We'll keep the local stream (video+audio) in state
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
-
-  // The RTCPeerConnection for this call
   const [peerConnection, setPeerConnection] = useState<RTCPeerConnection | null>(null);
 
-  // ICE servers
+  // ICE servers config
   const ICE_SERVERS = [{ urls: "stun:stun.l.google.com:19302" }];
 
-  // 1. Get user media (video+audio) on mount
+  // 1. Acquire video+audio
   useEffect(() => {
     (async () => {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: true,
+        });
         console.log("Got local stream with video+audio.");
         setLocalStream(stream);
 
@@ -178,11 +225,10 @@ function VideoChat({
     })();
   }, []);
 
-  // 2. Once we have a localStream + socket, we set up the MediaRecorder for audio-only STT
+  // 2. Start a MediaRecorder for audio-only => STT
   useEffect(() => {
     if (!localStream || !socket) return;
 
-    // Extract only the audio track
     const audioTrack = localStream.getAudioTracks()[0];
     if (!audioTrack) {
       console.warn("No audio track in localStream!");
@@ -212,10 +258,10 @@ function VideoChat({
       }
     };
 
-    recorder.start(250); // send ~every 250ms
+    recorder.start(250); // ~every 250ms
     console.log("Audio-only MediaRecorder started:", mimeType);
 
-    // Cleanup
+    // Cleanup on unmount
     return () => {
       if (recorder && recorder.state !== "inactive") {
         console.log("Stopping MediaRecorder");
@@ -272,11 +318,10 @@ function VideoChat({
     };
   }, [socket, peerConnection]);
 
-  // Create a PeerConnection when needed
+  // Create new RTCPeerConnection
   function createPeerConnection() {
     const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
 
-    // Add local tracks
     if (localStream) {
       localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
     }
@@ -298,7 +343,7 @@ function VideoChat({
     return pc;
   }
 
-  // 4. Make a call (send offer)
+  // 4. Send offer
   async function makeCall() {
     if (!socket) return;
     const pc = createPeerConnection();
