@@ -2,6 +2,9 @@
 
 import React, { useEffect, useState, useRef } from "react";
 import { io, Socket } from "socket.io-client";
+import { getFirestore, doc, getDoc } from "firebase/firestore";
+import { firebaseApp } from "../../../config/firebaseConfig";
+import { useAuth } from "../../auth/hooks/useAuth";
 
 export default function CallsList() {
   const [socket, setSocket] = useState<Socket | null>(null);
@@ -9,57 +12,90 @@ export default function CallsList() {
   const [joinedCall, setJoinedCall] = useState<string | null>(null);
   const [latestTranscript, setLatestTranscript] = useState("");
 
+  const { user, loading } = useAuth(); // from your custom hook
+  const db = getFirestore(firebaseApp);
+
   useEffect(() => {
-    const s = io("wss://cultureconnect-frontend-production.up.railway.app", {
+    // If we're still "loading" auth, or no user is logged in, don't connect yet
+    if (loading) return;
+    if (!user) {
+      console.log("No user logged in yet, or user is null. Skipping socket init...");
+      return;
+    }
+
+    // 1. Connect to your Socket.IO server
+    const s = io("http://localhost:3000", {
       transports: ["websocket"],
       path: "/socket.io",
     });
+
     setSocket(s);
 
-    // Listen for active calls
-    s.on("active-calls", (calls: string[]) => {
-      setActiveCalls(calls);
-    });
+    // 2. Fetch user language from Firestore and emit to the server
+    (async () => {
+      try {
+        const userRef = doc(db, "users", user.uid);
+        const snapshot = await getDoc(userRef);
 
-    // A new call started
-    s.on("call-started", (callId: string) => {
-      setActiveCalls((prev) => [...prev, callId]);
-    });
+        if (snapshot.exists()) {
+          const data = snapshot.data();
+          const userLang = data.native_language || "en-US";
+          console.log("User language from Firestore:", userLang);
 
-    // We started a call => server gives us the callId
-    s.on("call-id", (callId: string) => {
-      console.log("Started call:", callId);
-      setJoinedCall(callId);
-    });
+          // Tell the server which language we want to use for STT
+          s.emit("set-language", userLang);
+        } else {
+          console.log("User doc not found in Firestore, defaulting to en-US.");
+          s.emit("set-language", "en-US");
+        }
+      } catch (err) {
+        console.error("Error fetching user doc:", err);
+        // If an error occurs, default to English
+        s.emit("set-language", "en-US");
+      }
 
-    // We join a call => server confirms
-    s.on("joined-call", (callId: string) => {
-      console.log("Joined call:", callId);
-      setJoinedCall(callId);
-    });
+      // Now that we've set the language, set up your other socket listeners
+      // (You could also set these up immediately—doesn't hurt.)
+      s.on("active-calls", (calls: string[]) => {
+        setActiveCalls(calls);
+      });
 
-    // Speech transcripts
-    s.on("transcript", (text: string) => {
-      console.log("Transcript:", text);
-      setLatestTranscript(text);
-    });
+      s.on("call-started", (callId: string) => {
+        setActiveCalls((prev) => [...prev, callId]);
+      });
 
-    // Errors
-    s.on("speech-error", (err: string) => {
-      console.error("Speech error:", err);
-    });
-    s.on("call-error", (msg: string) => {
-      alert(msg);
-    });
+      s.on("call-id", (callId: string) => {
+        console.log("Started call:", callId);
+        setJoinedCall(callId);
+      });
 
-    // On mount, ask server for existing calls
-    s.emit("get-active-calls");
+      s.on("joined-call", (callId: string) => {
+        console.log("Joined call:", callId);
+        setJoinedCall(callId);
+      });
+
+      s.on("transcript", (text: string) => {
+        console.log("Transcript:", text);
+        setLatestTranscript(text);
+      });
+
+      s.on("speech-error", (err: string) => {
+        console.error("Speech error:", err);
+      });
+
+      s.on("call-error", (msg: string) => {
+        alert(msg);
+      });
+
+      // On mount, ask server for existing calls
+      s.emit("get-active-calls");
+    })();
 
     // Cleanup on unmount
     return () => {
       s.disconnect();
     };
-  }, []);
+  }, [user, loading, db]);
 
   // Start a new call
   function handleStartCall() {
@@ -79,6 +115,7 @@ export default function CallsList() {
         <div>
           <p>Joined call: {joinedCall}</p>
           <p>Latest transcript: {latestTranscript}</p>
+          {/* Render the video chat if socket is ready */}
           {socket && <VideoChat callId={joinedCall} socket={socket} />}
         </div>
       ) : (
@@ -100,12 +137,9 @@ export default function CallsList() {
   );
 }
 
-/**
- * VideoChat:
- * 1. Get a local video+audio stream => show in <video>.
- * 2. Create RTCPeerConnection, handle offers/answers/ICE => show remote video.
- * 3. Create a separate MediaRecorder from the local audio track => sends audio to server for STT.
- */
+// ------------------------------
+// VideoChat Component (unchanged)
+// ------------------------------
 function VideoChat({
   callId,
   socket,
