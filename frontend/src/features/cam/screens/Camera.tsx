@@ -3,6 +3,7 @@ import { io, Socket } from "socket.io-client";
 import { getFirestore, doc, getDoc } from "firebase/firestore";
 import { firebaseApp } from "../../../config/firebaseConfig";
 import { useAuth } from "../../auth/hooks/useAuth";
+import { useNavigate } from "react-router-dom"; // to navigate to /profile
 
 interface ActiveCall {
   callId: string;
@@ -22,9 +23,11 @@ export default function CallsList() {
 
   const [userName, setUserName] = useState("Unknown");
   const [userLang, setUserLang] = useState("en-US");
+  const [userPfp, setUserPfp] = useState<string>(""); // NEW: store user's profile pic
 
   const { user, loading } = useAuth();
   const db = getFirestore(firebaseApp);
+  const navigate = useNavigate(); // for navigation
 
   // 1. On mount (once auth is ready), fetch user info, connect Socket
   useEffect(() => {
@@ -41,14 +44,18 @@ export default function CallsList() {
 
       let displayName = user.displayName || "Unknown";
       let nativeLang = "en-US";
+      let pfpUrl = ""; // fallback if missing
+
       if (snapshot.exists()) {
         const data = snapshot.data();
         displayName = data.name || displayName;
         nativeLang = data.native_language || nativeLang;
+        pfpUrl = data.pfp || user.photoURL || ""; // prefer Firestore pfp, fallback to user.photoURL
       }
 
       setUserName(displayName);
       setUserLang(nativeLang);
+      setUserPfp(pfpUrl);
 
       // Connect to Socket.IO
       const s = io("wss://cultureconnect-frontend-production.up.railway.app", {
@@ -66,10 +73,13 @@ export default function CallsList() {
         setActiveCalls(calls);
       });
       s.on("call-started", (callId: string) => {
-        setActiveCalls((prev) => [
-          ...prev,
-          { callId, ownerName: userName, ownerLang: userLang },
-        ]);
+        // Added a small delay before we add the new call to the activeCalls
+        setTimeout(() => {
+          setActiveCalls((prev) => [
+            ...prev,
+            { callId, ownerName: displayName, ownerLang: nativeLang },
+          ]);
+        }, 2000);
       });
       s.on("call-id", (callId: string) => {
         console.log("Started call:", callId);
@@ -130,8 +140,28 @@ export default function CallsList() {
   // If we've joined a call, show the video/translation interface
   if (joinedCall && socket) {
     return (
-      // Gradient background, center content
-      <div className="min-h-screen p-4 sm:p-6 lg:p-8 bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center">
+      // Outer container with relative to place top-right PFP
+      <div className="relative min-h-screen p-4 sm:p-6 lg:p-8 bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center">
+
+        {/* TOP-RIGHT PFP BUTTON */}
+        <div className="absolute top-4 right-4">
+          {userPfp ? (
+            <img
+              src={userPfp}
+              alt="Profile"
+              onClick={() => navigate("/profile")}
+              className="w-10 h-10 rounded-full object-cover cursor-pointer hover:opacity-90 border-2 border-white"
+            />
+          ) : (
+            <button
+              onClick={() => navigate("/profile")}
+              className="px-3 py-2 bg-gray-800 text-white rounded-full hover:bg-gray-700 transition"
+            >
+              Profile
+            </button>
+          )}
+        </div>
+
         {/* Semi-transparent card */}
         <div className="w-full max-w-7xl bg-white/90 backdrop-blur-sm shadow-xl rounded-md p-6 space-y-6">
           {/* Header */}
@@ -200,7 +230,28 @@ export default function CallsList() {
 
   // Otherwise, show the "lobby" list (grid style)
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-400 to-blue-600 p-4 sm:p-6 lg:p-8">
+    // Outer container with relative to place top-right PFP
+    <div className="relative min-h-screen bg-gradient-to-br from-blue-400 to-blue-600 p-4 sm:p-6 lg:p-8">
+
+      {/* TOP-RIGHT PFP BUTTON */}
+      <div className="absolute top-4 right-4">
+        {userPfp ? (
+          <img
+            src={userPfp}
+            alt="Profile"
+            onClick={() => navigate("/profile")}
+            className="w-10 h-10 rounded-full object-cover cursor-pointer hover:opacity-90 border-2 border-white"
+          />
+        ) : (
+          <button
+            onClick={() => navigate("/profile")}
+            className="px-3 py-2 bg-gray-800 text-white rounded-full hover:bg-gray-700 transition"
+          >
+            Profile
+          </button>
+        )}
+      </div>
+
       <header className="mb-8 text-center">
         <h1 className="text-3xl sm:text-4xl font-bold text-white mb-4">
           CultureConnect Video Calls
