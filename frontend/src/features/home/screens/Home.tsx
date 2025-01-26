@@ -41,7 +41,7 @@ export default function LoginScreen() {
       {/* Main Content */}
       <div className="flex flex-col items-start space-y-4 mt-12 md:mt-0 md:ml-36 z-10">
         <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold text-white mb-2 leading-snug drop-shadow-lg">
-          Your home away <br /> from home
+          One World, <br /> One Conversation
         </h1>
         <p className="text-white text-sm sm:text-base md:text-lg max-w-md">
           Experience real-time video calls with instant language translation. 
