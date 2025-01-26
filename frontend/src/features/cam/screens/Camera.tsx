@@ -17,7 +17,7 @@ interface ActiveCall {
  *  - Fetches the user's name & language from Firestore
  *  - Lets user start/join calls
  *  - Displays transcripts & translations
- *  - Renders VideoChat component once in a call
+ *  - Renders <VideoChat> once in a call
  */
 export default function CallsList() {
   const [socket, setSocket] = useState<Socket | null>(null);
@@ -58,7 +58,6 @@ export default function CallsList() {
         nativeLang = data.native_language || nativeLang;
       }
 
-      // Store in local state
       setUserName(displayName);
       setUserLang(nativeLang);
 
@@ -79,7 +78,10 @@ export default function CallsList() {
       });
       s.on("call-started", (callId: string) => {
         // new call
-        setActiveCalls((prev) => [...prev, { callId, ownerName: "??", ownerLang: "??" }]);
+        setActiveCalls((prev) => [
+          ...prev,
+          { callId, ownerName: "??", ownerLang: "??" },
+        ]);
       });
       s.on("call-id", (callId: string) => {
         console.log("Started call:", callId);
@@ -119,7 +121,7 @@ export default function CallsList() {
     if (!socket) return;
     socket.emit("start-call", {
       userName,
-      userLang, 
+      userLang,
     });
   }
 
@@ -140,69 +142,114 @@ export default function CallsList() {
   if (joinedCall && socket) {
     // If we've joined a call, show video chat
     return (
-      <div className="min-h-screen p-4">
-        <p>Joined call: {joinedCall}</p>
+      <div className="min-h-screen flex flex-col bg-gray-100 p-4">
+        <header className="mb-4">
+          <h1 className="text-xl font-semibold text-gray-700">
+            In Call: {joinedCall}
+          </h1>
+          <p className="text-gray-600">Hello {userName} - ({userLang})</p>
+        </header>
 
-        {/* Show your own recognized speech */}
-        <p>
-          <strong>My transcript:</strong> {latestTranscript}
-        </p>
+        <div className="flex flex-col lg:flex-row gap-6">
+          {/* Left column: transcripts & translations */}
+          <div className="flex-1 bg-white p-4 rounded-md shadow">
+            <h2 className="text-lg font-bold mb-2 text-gray-700">
+              My Transcript
+            </h2>
+            <div className="p-3 bg-gray-50 rounded min-h-[80px] border border-gray-200 mb-4">
+              {latestTranscript ? (
+                <p className="text-gray-800">{latestTranscript}</p>
+              ) : (
+                <p className="text-gray-400 italic">No speech yet.</p>
+              )}
+            </div>
 
-        {/* Show translations from others */}
-        <div style={{ marginTop: 10 }}>
-          <h3>Translations Received:</h3>
-          {translatedMessages.map((msg, idx) => (
-            <p key={idx} style={{ margin: "4px 0" }}>
-              <em>{msg.from} → {msg.to}</em>:
-              <strong> {msg.translated}</strong>{" "}
-              <small style={{ color: "#666" }}>
-                (original: {msg.original})
-              </small>
-            </p>
-          ))}
+            <h2 className="text-lg font-bold mb-2 text-gray-700">
+              Translations Received
+            </h2>
+            <div className="p-3 bg-gray-50 rounded min-h-[100px] border border-gray-200 space-y-2 overflow-y-auto">
+              {translatedMessages.length === 0 && (
+                <p className="text-gray-400 italic">No translations yet.</p>
+              )}
+              {translatedMessages.map((msg, idx) => (
+                <div key={idx} className="text-sm text-gray-700">
+                  <span className="font-semibold">
+                    {msg.from.toUpperCase()} → {msg.to.toUpperCase()}:
+                  </span>{" "}
+                  <span className="font-medium">{msg.translated}</span>
+                  <span className="ml-2 text-xs text-gray-500 italic">
+                    (original: {msg.original})
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <button
+              onClick={handleLeave}
+              className="mt-4 inline-block px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
+            >
+              Leave Call
+            </button>
+          </div>
+
+          {/* Right column: Video call */}
+          <div className="flex-1 bg-white p-4 rounded-md shadow">
+            <VideoChat callId={joinedCall} socket={socket} />
+          </div>
         </div>
-
-        <VideoChat callId={joinedCall} socket={socket} onLeave={handleLeave} />
       </div>
     );
   }
 
   // Not in a call => show list
   return (
-    <div className="min-h-screen bg-[#78C3FB] p-4">
-      <h1 className="text-center text-2xl font-bold text-white mb-4">
-        Calls (Welcome {userName} - {userLang})
-      </h1>
+    <div className="min-h-screen bg-gradient-to-br from-blue-400 to-blue-600 p-4">
+      <div className="max-w-2xl mx-auto bg-white p-6 rounded-md shadow space-y-4">
+        <h1 className="text-center text-2xl font-bold text-gray-800 mb-2">
+          CultureConnect Video Calls
+        </h1>
+        <p className="text-center text-sm text-gray-600">
+          Welcome <span className="font-semibold">{userName}</span> (
+          <em>{userLang}</em>)
+        </p>
 
-      <div className="max-w-xl mx-auto bg-white p-6 rounded-md shadow space-y-4">
-        <button
-          onClick={handleStartCall}
-          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-        >
-          Start a New Call
-        </button>
+        <div className="mt-4 space-y-3">
+          <button
+            onClick={handleStartCall}
+            className="w-full px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition"
+          >
+            Start a New Call
+          </button>
 
-        <h2 className="text-lg font-semibold">Or join an existing call:</h2>
-        {activeCalls.length === 0 && <p>No active calls right now.</p>}
-        <ul className="space-y-2">
-          {activeCalls.map(({ callId, ownerName, ownerLang }) => (
-            <li key={callId}>
-              <button
-                onClick={() => handleJoinCall(callId)}
-                className="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600"
-              >
-                Join "{ownerName}" ({ownerLang}) - ID: {callId}
-              </button>
-            </li>
-          ))}
-        </ul>
+          <h2 className="text-lg font-semibold text-gray-700">Or join an existing call:</h2>
+          {activeCalls.length === 0 && (
+            <p className="text-gray-500 text-sm italic">No active calls right now.</p>
+          )}
+          <ul className="space-y-2">
+            {activeCalls.map(({ callId, ownerName, ownerLang }) => (
+              <li key={callId} className="flex flex-col sm:flex-row items-start sm:items-center sm:justify-between border border-gray-200 rounded p-3">
+                <div className="text-gray-700">
+                  <span className="font-semibold text-blue-700">{ownerName}</span>{" "}
+                  (<em>{ownerLang}</em>) -{" "}
+                  <span className="text-sm text-gray-500">ID: {callId}</span>
+                </div>
+                <button
+                  onClick={() => handleJoinCall(callId)}
+                  className="mt-2 sm:mt-0 sm:ml-3 px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 transition text-sm"
+                >
+                  Join
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
       </div>
     </div>
   );
 }
 
 /**
- * VideoChat component:
+ * VideoChat component (UI improved with Tailwind):
  * - Acquire local video+audio
  * - Setup WebRTC
  * - Also record audio chunks => "audio-data"
@@ -210,17 +257,17 @@ export default function CallsList() {
 function VideoChat({
   callId,
   socket,
-  onLeave,
 }: {
   callId: string;
   socket: Socket;
-  onLeave: () => void;
 }) {
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
 
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
-  const [peerConnection, setPeerConnection] = useState<RTCPeerConnection | null>(null);
+  const [peerConnection, setPeerConnection] = useState<RTCPeerConnection | null>(
+    null
+  );
 
   const ICE_SERVERS = [{ urls: "stun:stun.l.google.com:19302" }];
 
@@ -360,28 +407,28 @@ function VideoChat({
   }
 
   return (
-    <div style={{ marginTop: 20 }}>
-      <div style={{ display: "flex", gap: "20px" }}>
+    <div>
+      <div className="flex flex-col md:flex-row items-start gap-4">
         <video
           ref={localVideoRef}
-          style={{ width: 300, border: "2px solid green" }}
+          className="w-64 border-2 border-green-400 rounded shadow"
           autoPlay
           muted
           playsInline
         />
         <video
           ref={remoteVideoRef}
-          style={{ width: 300, border: "2px solid blue" }}
+          className="w-64 border-2 border-blue-400 rounded shadow"
           autoPlay
           playsInline
         />
       </div>
 
-      <button onClick={makeCall} style={{ marginTop: 20 }}>
+      <button
+        onClick={makeCall}
+        className="mt-4 inline-block px-4 py-2 bg-blue-500 text-white font-medium rounded hover:bg-blue-600 transition"
+      >
         Call in {callId}
-      </button>
-      <button onClick={onLeave} style={{ marginLeft: 10 }}>
-        Leave Call
       </button>
     </div>
   );
