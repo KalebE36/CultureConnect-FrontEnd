@@ -52,25 +52,40 @@ export default function LoginScreen() {
 
   return (
     <main className="relative w-screen h-screen bg-[#4f70e2] overflow-hidden">
-      {/* 
-        Top-left “wave”:
-        - 50vw x 50vw circle
-        - bottom-right corner rounded to 100%
-        Adjust w-[50vw] h-[50vw] to see more or less curve. 
-      */}
-      <div className="absolute top-0 left-0 w-[30vw] h-[15vw] bg-gray-300 rounded-br-full" />
-      {/* 
-        Bottom-right “wave”:
-        - 50vw x 50vw circle
-        - top-left corner rounded to 100%
-      */}
-      <div className="absolute bottom-0 right-0 w-[15vw] h-[30vw] bg-[#e1e8fa] rounded-tl-full" />
+      {/* Top-left wave */}
+      <div
+        style={{
+          position: "absolute",
+          top: "-10%",
+          left: "-15%",
+          width: "60vw",
+          height: "20vw",
+          backgroundColor: "#FFFFFF",
+          borderBottomRightRadius: "80%", // Increased curve intensity
 
-      {/* Centered login card stays above the waves */}
+          transform: "rotate(-10deg)", // Adds more dynamic rotation
+        }}
+      />
+      {/* Bottom-right wave */}
+      <div
+        style={{
+          position: "absolute",
+          bottom: "-35%",
+          right: "-20%",
+          width: "45vw",
+          height: "45vw",
+          backgroundColor: "#FFFFFF",
+          borderTopLeftRadius: "90%", // Increased curve intensity
+          borderBottomLeftRadius: "-30%", // Increased curve intensity
+
+          transform: "rotate(20deg)", // Adds a more dynamic flow
+        }}
+      />
+      {/* Centered login card */}
       <div className="relative flex items-center justify-center w-full h-full">
         <div className="bg-white p-8 rounded shadow-md w-full max-w-sm">
           <h1 className="text-center text-2xl font-bold mb-6">
-            Sign in to Your Account
+            Login
           </h1>
           <button
             type="button"
@@ -78,7 +93,7 @@ export default function LoginScreen() {
                        text-white rounded-md focus:outline-none focus:ring-2 focus:ring-blue-400"
             onClick={handleGoogleLogin}
           >
-            Sign in with OAuth
+            Sign in with Google
           </button>
         </div>
       </div>
