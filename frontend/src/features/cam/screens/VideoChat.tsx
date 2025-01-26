@@ -5,17 +5,9 @@ interface VideoChatProps {
   callId: string;
   socket: Socket;
   onLeave: () => void;
-  latestTranscript: string;
-  translatedMessages: { original: string; translated: string; from: string; to: string }[];
 }
 
-export default function VideoChat({
-  callId,
-  socket,
-  onLeave,
-  latestTranscript,
-  translatedMessages
-}: VideoChatProps) {
+export default function VideoChat({ callId, socket, onLeave }: VideoChatProps) {
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -27,7 +19,7 @@ export default function VideoChat({
   // ICE servers
   const ICE_SERVERS = [{ urls: "stun:stun.l.google.com:19302" }];
 
-  // Acquire video+audio
+  // Grab local video+audio
   useEffect(() => {
     (async () => {
       try {
@@ -35,7 +27,9 @@ export default function VideoChat({
           video: true,
           audio: true,
         });
+        console.log("Got local stream with video+audio.");
         setLocalStream(stream);
+
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = stream;
         }
@@ -45,7 +39,7 @@ export default function VideoChat({
     })();
   }, []);
 
-  // Start MediaRecorder for audio => STT
+  // Audio-only recorder => STT
   useEffect(() => {
     if (!localStream || !socket) return;
 
@@ -58,6 +52,7 @@ export default function VideoChat({
 
     let mimeType = "audio/webm; codecs=opus";
     if (!MediaRecorder.isTypeSupported(mimeType)) {
+      console.warn(`mimeType ${mimeType} not supported, falling back to 'audio/webm'`);
       mimeType = "audio/webm";
     }
 
@@ -75,7 +70,9 @@ export default function VideoChat({
         socket.emit("audio-data", arrayBuffer);
       }
     };
-    recorder.start(250);
+
+    recorder.start(250); // small chunks
+    console.log("Audio-only MediaRecorder started:", mimeType);
 
     return () => {
       if (recorder && recorder.state !== "inactive") {
@@ -84,11 +81,12 @@ export default function VideoChat({
     };
   }, [localStream, socket]);
 
-  // WebRTC signaling
+  // Set up Socket listeners for WebRTC
   useEffect(() => {
     if (!socket) return;
 
     const handleOffer = async (remoteSdp: RTCSessionDescriptionInit) => {
+      console.log("Received offer from remote peer");
       const pc = createPeerConnection();
       try {
         await pc.setRemoteDescription(remoteSdp);
@@ -101,6 +99,7 @@ export default function VideoChat({
     };
 
     const handleAnswer = async (remoteSdp: RTCSessionDescriptionInit) => {
+      console.log("Received answer from remote peer");
       if (!peerConnection) return;
       try {
         await peerConnection.setRemoteDescription(remoteSdp);
@@ -110,6 +109,7 @@ export default function VideoChat({
     };
 
     const handleICECandidate = async (candidate: RTCIceCandidate) => {
+      console.log("Received ICE candidate:", candidate);
       if (!peerConnection) return;
       try {
         await peerConnection.addIceCandidate(candidate);
@@ -129,7 +129,6 @@ export default function VideoChat({
     };
   }, [socket, peerConnection]);
 
-  // Create peer connection
   function createPeerConnection() {
     const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
     if (localStream) {
@@ -137,19 +136,23 @@ export default function VideoChat({
     }
 
     pc.ontrack = (event) => {
+      console.log("Remote track added:", event.streams[0]);
       if (remoteVideoRef.current) {
         remoteVideoRef.current.srcObject = event.streams[0];
       }
     };
+
     pc.onicecandidate = (event) => {
       if (event.candidate) {
         socket.emit("ice-candidate", { callId, candidate: event.candidate });
       }
     };
+
     setPeerConnection(pc);
     return pc;
   }
 
+  // Send offer
   async function makeCall() {
     if (!socket) return;
     const pc = createPeerConnection();
@@ -163,79 +166,29 @@ export default function VideoChat({
   }
 
   return (
-    <div className="bg-[#78C3FB] min-h-screen flex items-center justify-center p-4">
-      <div className="w-full max-w-6xl bg-white/90 backdrop-blur-sm shadow-xl rounded-md">
-        <div className="p-6 space-y-6">
-          <h1 className="text-3xl font-bold text-center text-[#587DDF] mb-6">
-            Video Chat
-          </h1>
-
-          {/* Two video panels side by side */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Local Video */}
-            <div className="overflow-hidden shadow-md rounded-md">
-              <div className="aspect-video bg-[#587DDF]/20 relative flex items-center justify-center text-[#587DDF]">
-                <video
-                  ref={localVideoRef}
-                  className="absolute inset-0 w-full h-full object-cover"
-                  autoPlay
-                  muted
-                  playsInline
-                />
-              </div>
-            </div>
-
-            {/* Remote Video */}
-            <div className="overflow-hidden shadow-md rounded-md">
-              <div className="aspect-video bg-[#587DDF]/20 relative flex items-center justify-center text-[#587DDF]">
-                <video
-                  ref={remoteVideoRef}
-                  className="absolute inset-0 w-full h-full object-cover"
-                  autoPlay
-                  playsInline
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Transcripts + translations (optional) */}
-          <div className="bg-white rounded-md shadow p-4">
-            <h2 className="text-xl font-semibold mb-2 text-[#587DDF]">
-              Live Translation
-            </h2>
-            <p className="text-gray-700 mb-3">
-              <strong>My transcript:</strong> {latestTranscript}
-            </p>
-            <div className="h-40 overflow-y-auto border border-[#587DDF]/20 p-3 bg-white rounded">
-              {translatedMessages.map((msg, idx) => (
-                <p key={idx} className="mb-2 text-[#587DDF]">
-                  <em>
-                    {msg.from} → {msg.to}
-                  </em>
-                  : <strong>{msg.translated}</strong>{" "}
-                  <small className="text-gray-500">(original: {msg.original})</small>
-                </p>
-              ))}
-            </div>
-          </div>
-
-          {/* Buttons row */}
-          <div className="flex flex-wrap justify-center gap-4 mt-6">
-            <button
-              onClick={makeCall}
-              className="bg-[#587DDF] text-white px-6 py-3 rounded-full font-semibold hover:bg-[#587DDF]/90 transition-all transform hover:scale-105"
-            >
-              Call in {callId}
-            </button>
-            <button
-              onClick={onLeave}
-              className="bg-[#3BC14A] text-white px-6 py-3 rounded-full font-semibold hover:bg-[#3BC14A]/90 transition-all transform hover:scale-105"
-            >
-              Leave Chat
-            </button>
-          </div>
-        </div>
+    <div style={{ marginTop: 20 }}>
+      <div style={{ display: "flex", gap: 20 }}>
+        <video
+          ref={localVideoRef}
+          style={{ width: 300, border: "2px solid green" }}
+          autoPlay
+          muted
+          playsInline
+        />
+        <video
+          ref={remoteVideoRef}
+          style={{ width: 300, border: "2px solid blue" }}
+          autoPlay
+          playsInline
+        />
       </div>
+
+      <button onClick={makeCall} style={{ marginTop: 20, marginRight: 10 }}>
+        Call in {callId}
+      </button>
+      <button onClick={onLeave} style={{ marginTop: 20 }}>
+        Leave Call
+      </button>
     </div>
   );
 }
