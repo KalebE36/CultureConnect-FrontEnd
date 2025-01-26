@@ -43,7 +43,7 @@ export default function LoginScreen() {
           console.log("User already exists in Firestore");
         }
 
-        navigate("/");
+        navigate("/camera");
       }
     } catch (error) {
       console.error("Error signing in with Google:", error);
