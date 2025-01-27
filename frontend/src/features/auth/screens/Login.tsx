@@ -37,7 +37,7 @@ export default function LoginScreen() {
             learning_language: "English",
             name: user.displayName || "Anonymous",
             native_language: "Unknown",
-            pfp: user.photoURL || "",
+            pfp: user.photoURL || "https://t3.ftcdn.net/jpg/05/16/27/58/360_F_516275801_f3Fsp17x6HQK0xQgDQEELoTuERO4SsWV.jpg",
           });
           console.log("New user added to Firestore");
         } else {

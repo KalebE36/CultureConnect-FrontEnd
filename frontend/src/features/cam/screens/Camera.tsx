@@ -346,6 +346,7 @@ function VideoChat({
   const [peerConnection, setPeerConnection] = useState<RTCPeerConnection | null>(
     null
   );
+  const [someoneJoined, setSomeoneJoined] = useState(false);
 
   const ICE_SERVERS = [{ urls: "stun:stun.l.google.com:19302" }];
 
@@ -411,6 +412,12 @@ function VideoChat({
   useEffect(() => {
     if (!socket) return;
 
+    const handleUserJoined = (joinedUserName?: string) => {
+      // Optionally, the server can pass a username
+      console.log("Someone joined the call!", joinedUserName);
+      setSomeoneJoined(true);
+    };
+
     const handleOffer = async (remoteSdp: RTCSessionDescriptionInit) => {
       const pc = createPeerConnection();
       try {
@@ -446,6 +453,7 @@ function VideoChat({
     socket.on("ice-candidate", handleICE);
 
     return () => {
+      socket.off("user-joined", handleUserJoined);
       socket.off("offer", handleOffer);
       socket.off("answer", handleAnswer);
       socket.off("ice-candidate", handleICE);
@@ -502,12 +510,21 @@ function VideoChat({
         />
       </div>
 
+      {/* If someone joined, show a small prompt to the user */}
+      {someoneJoined && (
+        <p className="mt-4 text-green-600 font-medium">
+          Someone just joined the call! Press “Connect” to begin the WebRTC session.
+        </p>
+      )}
+
       <button
         onClick={makeCall}
         className="mt-4 inline-block px-4 py-2 bg-blue-500 text-white font-medium rounded hover:bg-blue-600 transition"
       >
         Call in {callId}
       </button>
+      <br/>
+      <p className="mt-2 text-red-500">Works best on Chrome AND With Microphone!</p>
     </div>
   );
 }
